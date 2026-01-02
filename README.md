@@ -7,14 +7,15 @@ QuickVibe discovers devcontainer projects on your system, spins up containers, a
 ## Features
 
 - **Project Discovery** - Automatically finds devcontainer projects across configured search paths
-- **Container Management** - Starts devcontainers using the official CLI
-- **Tmux Integration** - List, create, and attach to tmux sessions inside containers
+- **Container Management** - Start, stop, and restart devcontainers using the official CLI
+- **Tmux Integration** - List, create, stop, restart, and attach to tmux sessions inside containers
 - **Keyboard Navigation** - Vim-style keybindings (j/k) and arrow key support
 - **Configurable** - YAML configuration for search paths and scan depth
 
-## Prerequisites
+## Requirements
 
-- Go 1.21+
+- Go 1.21+ (for building)
+- Docker
 - [devcontainer CLI](https://github.com/devcontainers/cli) - Install with:
   ```bash
   npm install -g @devcontainers/cli
@@ -23,16 +24,25 @@ QuickVibe discovers devcontainer projects on your system, spins up containers, a
 
 ## Installation
 
-```bash
-go install github.com/chezu/quickvibe@latest
-```
-
-Or build from source:
+### Build from Source
 
 ```bash
 git clone https://github.com/chezu/quickvibe.git
 cd quickvibe
 go build -o quickvibe .
+```
+
+Optionally, add to your PATH by creating a symlink:
+
+```bash
+mkdir -p ~/.local/bin
+ln -sf "$(pwd)/quickvibe" ~/.local/bin/quickvibe
+```
+
+### Go Install
+
+```bash
+go install github.com/chezu/quickvibe@latest
 ```
 
 ## Usage
@@ -52,12 +62,44 @@ quickvibe
 
 ### Keybindings
 
+#### Container Selection
+
 | Key | Action |
 |-----|--------|
 | `j` / `↓` | Move down |
 | `k` / `↑` | Move up |
-| `Enter` | Select |
-| `Esc` / `q` | Go back / Quit |
+| `Enter` | Select and start container |
+| `x` | Stop container |
+| `r` | Restart container |
+| `q` | Quit |
+| `Ctrl+C` | Quit |
+
+#### Tmux Session Selection
+
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Move down |
+| `k` / `↑` | Move up |
+| `Enter` | Select and attach to session |
+| `x` | Stop (kill) session |
+| `r` | Restart session |
+| `q` / `Esc` | Go back to container list |
+| `Ctrl+C` | Quit |
+
+#### New Session Input
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Create session with entered name |
+| `Esc` | Cancel and go back |
+| `Ctrl+C` | Quit |
+
+#### Confirmation Dialogs
+
+| Key | Action |
+|-----|--------|
+| `y` | Confirm action |
+| `n` / `Esc` | Cancel |
 | `Ctrl+C` | Quit |
 
 ## Configuration
@@ -83,10 +125,11 @@ Without a configuration file, QuickVibe searches your home directory with a max 
 
 ## How It Works
 
-1. Scans configured paths for `devcontainer.json` files
+1. Scans configured paths for `devcontainer.json` files (skips hidden directories, node_modules, vendor, etc.)
 2. Uses `devcontainer up` to ensure the container is running
-3. Queries tmux inside the container for existing sessions
-4. On selection, executes `devcontainer exec` to attach to the tmux session
+3. Checks that tmux is available in the container
+4. Queries tmux inside the container for existing sessions
+5. On selection, executes `devcontainer exec` to attach to the tmux session
 
 ## License
 

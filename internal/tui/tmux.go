@@ -46,7 +46,7 @@ func RenderTmuxSelect(projectName string, sessions []tmux.Session, cursor int) s
 	b.WriteString("\n")
 
 	b.WriteString("\n")
-	b.WriteString(HelpStyle.Render("↑/↓: Navigate  Enter: Select  q: Back"))
+	b.WriteString(HelpStyle.Render("↑/↓: Navigate  Enter: Select  x: Stop  r: Restart  q: Back"))
 
 	return b.String()
 }
@@ -95,4 +95,42 @@ func TotalTmuxOptions(sessions []tmux.Session) int {
 // IsNewSessionSelected returns true if the cursor is on the "New Session" option
 func IsNewSessionSelected(sessions []tmux.Session, cursor int) bool {
 	return cursor == len(sessions)
+}
+
+// RenderTmuxConfirmDialog renders a confirmation dialog for tmux stop/restart operations
+func RenderTmuxConfirmDialog(operation, sessionName string) string {
+	var b strings.Builder
+
+	title := TitleStyle.Render("quickVibe")
+	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	actionText := "Stop"
+	if operation == "restart" {
+		actionText = "Restart"
+	}
+	b.WriteString(ErrorStyle.Render(actionText + " tmux session?"))
+	b.WriteString("\n\n")
+	b.WriteString("Session: ")
+	b.WriteString(SuccessStyle.Render(sessionName))
+	b.WriteString("\n\n")
+	b.WriteString(HelpStyle.Render("y: Confirm  n/Esc: Cancel"))
+
+	return b.String()
+}
+
+// RenderTmuxOperation renders progress during tmux stop/restart operations
+func RenderTmuxOperation(operation, sessionName, spinnerView string) string {
+	var b strings.Builder
+
+	title := TitleStyle.Render("quickVibe")
+	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	b.WriteString(SpinnerStyle.Render(spinnerView))
+	b.WriteString(" " + operation + " session ")
+	b.WriteString(SuccessStyle.Render(sessionName))
+	b.WriteString("...")
+
+	return b.String()
 }

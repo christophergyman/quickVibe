@@ -22,6 +22,10 @@ const (
 	StateTmuxSelect
 	StateNewSessionInput
 	StateAttaching
+	StateConfirmTmuxStop
+	StateConfirmTmuxRestart
+	StateTmuxStopping
+	StateTmuxRestarting
 	StateError
 )
 
@@ -31,6 +35,7 @@ type Model struct {
 	projects        []devcontainer.Project
 	selectedProject *devcontainer.Project
 	tmuxSessions    []tmux.Session
+	selectedSession *tmux.Session
 	cursor          int
 	spinner         spinner.Model
 	textInput       textinput.Model
@@ -48,6 +53,8 @@ type tmuxSessionCreatedMsg struct{}
 type attachMsg struct{ sessionName string }
 type containerStoppedMsg struct{}
 type containerRestartedMsg struct{}
+type tmuxSessionStoppedMsg struct{}
+type tmuxSessionRestartedMsg struct{}
 
 // New creates a new Model with discovered projects
 func New(projects []devcontainer.Project) Model {
@@ -114,6 +121,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selectedProject = nil
 		return m, nil
 
+	case tmuxSessionStoppedMsg, tmuxSessionRestartedMsg:
+		// Reload tmux sessions after stop/restart
+		m.selectedSession = nil
+		m.cursor = 0
+		return m, func() tea.Msg {
+			sessions, err := devcontainer.ListTmuxSessions(m.selectedProject.Path)
+			if err != nil {
+				return containerErrorMsg{err: err}
+			}
+			return tmuxSessionsLoadedMsg{sessions: sessions}
+		}
+
 	case attachMsg:
 		// This triggers the actual attachment - we exit the TUI
 		return m, tea.Quit
@@ -136,6 +155,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleContainerSelectKey(msg)
 	case StateConfirmStop, StateConfirmRestart:
 		return m.handleConfirmKey(msg)
+	case StateConfirmTmuxStop, StateConfirmTmuxRestart:
+		return m.handleTmuxConfirmKey(msg)
 	case StateTmuxSelect:
 		return m.handleTmuxSelectKey(msg)
 	case StateNewSessionInput:
@@ -208,6 +229,25 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) handleTmuxConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		if m.state == StateConfirmTmuxStop {
+			m.state = StateTmuxStopping
+			return m, tea.Batch(m.spinner.Tick, m.stopTmuxSession())
+		}
+		m.state = StateTmuxRestarting
+		return m, tea.Batch(m.spinner.Tick, m.restartTmuxSession())
+	case "n", "N", "esc":
+		m.state = StateTmuxSelect
+		m.selectedSession = nil
+		return m, nil
+	case "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
 func (m Model) handleTmuxSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	totalOptions := TotalTmuxOptions(m.tmuxSessions)
 
@@ -230,6 +270,20 @@ func (m Model) handleTmuxSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		if m.cursor < totalOptions-1 {
 			m.cursor++
+		}
+
+	case "x":
+		// Stop/kill selected tmux session (only for existing sessions)
+		if m.cursor < len(m.tmuxSessions) {
+			m.selectedSession = &m.tmuxSessions[m.cursor]
+			m.state = StateConfirmTmuxStop
+		}
+
+	case "r":
+		// Restart selected tmux session (only for existing sessions)
+		if m.cursor < len(m.tmuxSessions) {
+			m.selectedSession = &m.tmuxSessions[m.cursor]
+			m.state = StateConfirmTmuxRestart
 		}
 
 	case "enter":
@@ -327,6 +381,38 @@ func (m Model) restartContainer() tea.Cmd {
 	}
 }
 
+// stopTmuxSession returns a command that stops/kills a tmux session
+func (m Model) stopTmuxSession() tea.Cmd {
+	return func() tea.Msg {
+		if m.selectedProject == nil || m.selectedSession == nil {
+			return containerErrorMsg{err: nil}
+		}
+		if err := devcontainer.KillTmuxSession(m.selectedProject.Path, m.selectedSession.Name); err != nil {
+			return containerErrorMsg{err: err}
+		}
+		return tmuxSessionStoppedMsg{}
+	}
+}
+
+// restartTmuxSession returns a command that restarts a tmux session (kill + create)
+func (m Model) restartTmuxSession() tea.Cmd {
+	return func() tea.Msg {
+		if m.selectedProject == nil || m.selectedSession == nil {
+			return containerErrorMsg{err: nil}
+		}
+		sessionName := m.selectedSession.Name
+		// Kill existing session
+		if err := devcontainer.KillTmuxSession(m.selectedProject.Path, sessionName); err != nil {
+			return containerErrorMsg{err: err}
+		}
+		// Create new session with same name
+		if err := devcontainer.CreateTmuxSession(m.selectedProject.Path, sessionName); err != nil {
+			return containerErrorMsg{err: err}
+		}
+		return tmuxSessionRestartedMsg{}
+	}
+}
+
 // handleContainerStarted is called when container has started
 func (m Model) handleContainerStarted() (tea.Model, tea.Cmd) {
 	// Load tmux sessions
@@ -401,6 +487,34 @@ func (m Model) View() string {
 			projectName = m.selectedProject.Name
 		}
 		return RenderContainerOperation("Restarting", projectName, m.spinner.View())
+
+	case StateConfirmTmuxStop:
+		sessionName := ""
+		if m.selectedSession != nil {
+			sessionName = m.selectedSession.Name
+		}
+		return RenderTmuxConfirmDialog("stop", sessionName)
+
+	case StateConfirmTmuxRestart:
+		sessionName := ""
+		if m.selectedSession != nil {
+			sessionName = m.selectedSession.Name
+		}
+		return RenderTmuxConfirmDialog("restart", sessionName)
+
+	case StateTmuxStopping:
+		sessionName := ""
+		if m.selectedSession != nil {
+			sessionName = m.selectedSession.Name
+		}
+		return RenderTmuxOperation("Stopping", sessionName, m.spinner.View())
+
+	case StateTmuxRestarting:
+		sessionName := ""
+		if m.selectedSession != nil {
+			sessionName = m.selectedSession.Name
+		}
+		return RenderTmuxOperation("Restarting", sessionName, m.spinner.View())
 
 	case StateTmuxSelect:
 		projectName := ""

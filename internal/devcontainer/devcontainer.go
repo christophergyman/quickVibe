@@ -204,3 +204,17 @@ func HasTmux(projectPath string) bool {
 		"which", "tmux")
 	return cmd.Run() == nil
 }
+
+// KillTmuxSession kills a tmux session in the container
+func KillTmuxSession(projectPath, sessionName string) error {
+	cmd := exec.Command("devcontainer", "exec", "--workspace-folder", projectPath,
+		"tmux", "kill-session", "-t", sessionName)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to kill tmux session: %s", stderr.String())
+	}
+	return nil
+}
