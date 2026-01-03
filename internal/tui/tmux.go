@@ -46,7 +46,7 @@ func RenderTmuxSelect(projectName string, sessions []tmux.Session, cursor int) s
 	b.WriteString("\n")
 
 	b.WriteString("\n")
-	b.WriteString(HelpStyle.Render("↑/↓: Navigate  Enter: Select  x: Stop  r: Restart  q: Back"))
+	b.WriteString(HelpStyle.Render("↑/↓: Navigate  Enter: Select  x: Stop  r: Restart  ?: Config  q: Back"))
 
 	return b.String()
 }
@@ -83,6 +83,24 @@ func RenderAttaching(projectName, sessionName, spinnerView string) string {
 	b.WriteString(" Attaching to ")
 	b.WriteString(SuccessStyle.Render(sessionName))
 	b.WriteString("...")
+
+	return b.String()
+}
+
+// RenderLoadingTmuxSessions renders the loading state while fetching tmux sessions
+func RenderLoadingTmuxSessions(projectName, spinnerView string) string {
+	var b strings.Builder
+
+	title := TitleStyle.Render("claude-quick")
+	subtitle := SubtitleStyle.Render("Project: " + projectName)
+
+	b.WriteString(title)
+	b.WriteString("\n")
+	b.WriteString(subtitle)
+	b.WriteString("\n\n")
+
+	b.WriteString(SpinnerStyle.Render(spinnerView))
+	b.WriteString(" Loading tmux sessions...")
 
 	return b.String()
 }

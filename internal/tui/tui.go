@@ -14,7 +14,8 @@ import (
 type State int
 
 const (
-	StateContainerSelect State = iota
+	StateDiscovering State = iota
+	StateContainerSelect
 	StateContainerStarting
 	StateConfirmStop
 	StateConfirmRestart
@@ -27,6 +28,7 @@ const (
 	StateConfirmTmuxRestart
 	StateTmuxStopping
 	StateTmuxRestarting
+	StateLoadingTmuxSessions
 	StateError
 	StateShowConfig
 )
@@ -50,6 +52,9 @@ type Model struct {
 }
 
 // Messages for async operations
+type projectsDiscoveredMsg struct {
+	projects []devcontainer.Project
+}
 type containerStartedMsg struct{}
 type containerErrorMsg struct{ err error }
 type tmuxSessionsLoadedMsg struct{ sessions []string }
@@ -80,9 +85,44 @@ func New(projects []devcontainer.Project, cfg *config.Config) Model {
 	}
 }
 
+// NewWithDiscovery creates a Model that will discover projects asynchronously
+func NewWithDiscovery(cfg *config.Config) Model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = SpinnerStyle
+
+	ti := textinput.New()
+	ti.Placeholder = cfg.DefaultSessionName
+	ti.CharLimit = 50
+	ti.Width = 30
+
+	return Model{
+		state:     StateDiscovering,
+		projects:  nil,
+		spinner:   s,
+		textInput: ti,
+		config:    cfg,
+	}
+}
+
 // Init implements tea.Model
 func (m Model) Init() tea.Cmd {
+	if m.state == StateDiscovering {
+		return tea.Batch(m.spinner.Tick, m.discoverProjects())
+	}
 	return nil
+}
+
+// discoverProjects returns a command that discovers devcontainer projects
+func (m Model) discoverProjects() tea.Cmd {
+	return func() tea.Msg {
+		projects := devcontainer.Discover(
+			m.config.SearchPaths,
+			m.config.MaxDepth,
+			m.config.ExcludedDirs,
+		)
+		return projectsDiscoveredMsg{projects: projects}
+	}
 }
 
 // Update implements tea.Model
@@ -100,6 +140,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+
+	case projectsDiscoveredMsg:
+		m.projects = msg.projects
+		m.state = StateContainerSelect
+		m.cursor = 0
+		return m, nil
 
 	case containerStartedMsg:
 		return m.handleContainerStarted()
@@ -127,16 +173,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tmuxSessionStoppedMsg, tmuxSessionRestartedMsg:
-		// Reload tmux sessions after stop/restart
+		// Reload tmux sessions after stop/restart with loading animation
 		m.selectedSession = nil
 		m.cursor = 0
-		return m, func() tea.Msg {
-			sessions, err := devcontainer.ListTmuxSessions(m.selectedProject.Path)
-			if err != nil {
-				return containerErrorMsg{err: err}
-			}
-			return tmuxSessionsLoadedMsg{sessions: sessions}
-		}
+		m.state = StateLoadingTmuxSessions
+		return m, tea.Batch(m.spinner.Tick, m.loadTmuxSessions())
 
 	case attachMsg:
 		// This triggers the actual attachment - we exit the TUI
@@ -170,6 +211,10 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Any key returns to container select
 		m.state = StateContainerSelect
 		m.err = nil
+		return m, nil
+	case StateShowConfig:
+		// Any key returns to previous state
+		m.state = m.previousState
 		return m, nil
 	}
 	return m, nil
@@ -211,6 +256,11 @@ func (m Model) handleContainerSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selectedProject = &m.projects[m.cursor]
 			m.state = StateConfirmRestart
 		}
+
+	case "?":
+		m.previousState = m.state
+		m.state = StateShowConfig
+		return m, nil
 	}
 	return m, nil
 }
@@ -290,6 +340,11 @@ func (m Model) handleTmuxSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selectedSession = &m.tmuxSessions[m.cursor]
 			m.state = StateConfirmTmuxRestart
 		}
+
+	case "?":
+		m.previousState = m.state
+		m.state = StateShowConfig
+		return m, nil
 
 	case "enter":
 		if IsNewSessionSelected(m.tmuxSessions, m.cursor) {
@@ -421,8 +476,14 @@ func (m Model) restartTmuxSession() tea.Cmd {
 
 // handleContainerStarted is called when container has started
 func (m Model) handleContainerStarted() (tea.Model, tea.Cmd) {
-	// Load tmux sessions
-	return m, func() tea.Msg {
+	// Transition to loading state with spinner
+	m.state = StateLoadingTmuxSessions
+	return m, tea.Batch(m.spinner.Tick, m.loadTmuxSessions())
+}
+
+// loadTmuxSessions returns a command that loads tmux sessions
+func (m Model) loadTmuxSessions() tea.Cmd {
+	return func() tea.Msg {
 		sessions, err := devcontainer.ListTmuxSessions(m.selectedProject.Path)
 		if err != nil {
 			return containerErrorMsg{err: err}
@@ -456,6 +517,9 @@ func (m Model) attachToSession(sessionName string) (tea.Model, tea.Cmd) {
 // View implements tea.Model
 func (m Model) View() string {
 	switch m.state {
+	case StateDiscovering:
+		return RenderDiscovering(m.spinner.View())
+
 	case StateContainerSelect:
 		return RenderContainerSelect(m.projects, m.cursor, m.width)
 
@@ -522,6 +586,13 @@ func (m Model) View() string {
 		}
 		return RenderTmuxOperation("Restarting", sessionName, m.spinner.View())
 
+	case StateLoadingTmuxSessions:
+		projectName := ""
+		if m.selectedProject != nil {
+			projectName = m.selectedProject.Name
+		}
+		return RenderLoadingTmuxSessions(projectName, m.spinner.View())
+
 	case StateTmuxSelect:
 		projectName := ""
 		if m.selectedProject != nil {
@@ -549,6 +620,9 @@ func (m Model) View() string {
 
 	case StateError:
 		return RenderError(m.err, m.errHint)
+
+	case StateShowConfig:
+		return RenderConfigDisplay(m.config)
 	}
 
 	return ""

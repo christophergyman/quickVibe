@@ -25,11 +25,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Discover devcontainer projects
-	projects := devcontainer.Discover(cfg.SearchPaths, cfg.MaxDepth, cfg.ExcludedDirs)
-
-	// Create and run TUI
-	model := tui.New(projects, cfg)
+	// Create TUI with async discovery - shows spinner while searching for projects
+	model := tui.NewWithDiscovery(cfg)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	finalModel, err := p.Run()

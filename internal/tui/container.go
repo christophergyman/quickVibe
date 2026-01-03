@@ -45,7 +45,7 @@ func RenderContainerSelect(projects []devcontainer.Project, cursor int, width in
 	}
 
 	b.WriteString("\n")
-	b.WriteString(HelpStyle.Render("↑/↓: Navigate  Enter: Select  x: Stop  r: Restart  q: Quit"))
+	b.WriteString(HelpStyle.Render("↑/↓: Navigate  Enter: Select  x: Stop  r: Restart  ?: Config  q: Quit"))
 
 	return b.String()
 }
@@ -124,6 +124,22 @@ func RenderContainerOperation(operation, projectName, spinnerView string) string
 	b.WriteString(fmt.Sprintf(" %s ", operation))
 	b.WriteString(SuccessStyle.Render(projectName))
 	b.WriteString("...")
+
+	return b.String()
+}
+
+// RenderDiscovering renders the project discovery loading state
+func RenderDiscovering(spinnerView string) string {
+	var b strings.Builder
+
+	title := TitleStyle.Render("claude-quick")
+	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	b.WriteString(SpinnerStyle.Render(spinnerView))
+	b.WriteString(" Discovering projects...")
+	b.WriteString("\n\n")
+	b.WriteString(DimmedStyle.Render("Searching for devcontainer.json files..."))
 
 	return b.String()
 }
