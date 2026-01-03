@@ -344,11 +344,11 @@ func (m Model) handleTmuxSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "q", "esc":
-		// Go back to container select
-		m.state = StateDashboard
+		// Go back to container select with status refresh
+		m.state = StateRefreshingStatus
 		m.cursor = 0
 		m.selectedProject = nil
-		return m, nil
+		return m, tea.Batch(m.spinner.Tick, m.refreshProjectStatus())
 
 	case "ctrl+c":
 		return m, tea.Quit
