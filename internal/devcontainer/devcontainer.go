@@ -18,9 +18,15 @@ type Project struct {
 }
 
 // Discover finds all devcontainer projects in the given search paths
-func Discover(searchPaths []string, maxDepth int) []Project {
+func Discover(searchPaths []string, maxDepth int, excludedDirs []string) []Project {
 	var projects []Project
 	seen := make(map[string]bool)
+
+	// Build exclusion set for O(1) lookup
+	excludeSet := make(map[string]bool, len(excludedDirs))
+	for _, dir := range excludedDirs {
+		excludeSet[dir] = true
+	}
 
 	for _, searchPath := range searchPaths {
 		filepath.WalkDir(searchPath, func(path string, d fs.DirEntry, err error) error {
@@ -33,12 +39,9 @@ func Discover(searchPaths []string, maxDepth int) []Project {
 				return fs.SkipDir
 			}
 
-			// Skip node_modules and other common large directories
-			if d.IsDir() {
-				switch d.Name() {
-				case "node_modules", "vendor", ".git", "__pycache__", "venv", ".venv":
-					return fs.SkipDir
-				}
+			// Skip excluded directories
+			if d.IsDir() && excludeSet[d.Name()] {
+				return fs.SkipDir
 			}
 
 			// Check depth

@@ -9,16 +9,37 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	SearchPaths []string `yaml:"search_paths"`
-	MaxDepth    int      `yaml:"max_depth"`
+	SearchPaths        []string `yaml:"search_paths"`
+	MaxDepth           int      `yaml:"max_depth"`
+	ExcludedDirs       []string `yaml:"excluded_dirs"`
+	DefaultSessionName string   `yaml:"default_session_name"`
+	ContainerTimeout   int      `yaml:"container_timeout_seconds"`
+}
+
+// DefaultExcludedDirs returns the default directories to exclude from scanning
+func DefaultExcludedDirs() []string {
+	return []string{
+		"node_modules",
+		"vendor",
+		".git",
+		"__pycache__",
+		"venv",
+		".venv",
+		"dist",
+		"build",
+		".cache",
+	}
 }
 
 // DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
 	homeDir, _ := os.UserHomeDir()
 	return &Config{
-		SearchPaths: []string{homeDir},
-		MaxDepth:    3,
+		SearchPaths:        []string{homeDir},
+		MaxDepth:           3,
+		ExcludedDirs:       DefaultExcludedDirs(),
+		DefaultSessionName: "main",
+		ContainerTimeout:   300,
 	}
 }
 
@@ -58,6 +79,25 @@ func Load() (*Config, error) {
 	// Ensure reasonable defaults
 	if cfg.MaxDepth <= 0 {
 		cfg.MaxDepth = 3
+	}
+
+	// Use default excluded dirs if none specified
+	if len(cfg.ExcludedDirs) == 0 {
+		cfg.ExcludedDirs = DefaultExcludedDirs()
+	}
+
+	// Ensure default session name
+	if cfg.DefaultSessionName == "" {
+		cfg.DefaultSessionName = "main"
+	}
+
+	// Ensure reasonable timeout (minimum 30 seconds, max 30 minutes)
+	if cfg.ContainerTimeout <= 0 {
+		cfg.ContainerTimeout = 300
+	} else if cfg.ContainerTimeout < 30 {
+		cfg.ContainerTimeout = 30
+	} else if cfg.ContainerTimeout > 1800 {
+		cfg.ContainerTimeout = 1800
 	}
 
 	return cfg, nil

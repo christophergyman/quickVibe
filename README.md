@@ -27,7 +27,7 @@ Claude Quick discovers devcontainer projects on your system, spins up containers
 ### Build from Source
 
 ```bash
-git clone https://github.com/chezu/claude-quick.git
+git clone https://github.com/christophergyman/claude-quick.git
 cd claude-quick
 go build -o claude-quick .
 ```
@@ -42,7 +42,7 @@ ln -sf "$(pwd)/claude-quick" ~/.local/bin/claude-quick
 ### Go Install
 
 ```bash
-go install github.com/chezu/claude-quick@latest
+go install github.com/christophergyman/claude-quick@latest
 ```
 
 ## Usage
@@ -117,7 +117,40 @@ search_paths:
 
 # Maximum directory depth to search (default: 3)
 max_depth: 4
+
+# Directories to skip during scanning (defaults shown below)
+excluded_dirs:
+  - node_modules
+  - vendor
+  - .git
+  - __pycache__
+  - venv
+  - .venv
+  - dist
+  - build
+  - .cache
+
+# Default name for new tmux sessions (default: "main")
+default_session_name: dev
+
+# Container startup timeout in seconds (default: 300)
+container_timeout_seconds: 300
 ```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `search_paths` | list | `[~]` | Directories to scan for devcontainer projects |
+| `max_depth` | int | `3` | Maximum directory depth for scanning |
+| `excluded_dirs` | list | See below | Directories to skip during scanning |
+| `default_session_name` | string | `main` | Default name for new tmux sessions |
+| `container_timeout_seconds` | int | `300` | Timeout for container startup (30-1800) |
+
+#### Default Excluded Directories
+
+By default, the following directories are skipped during scanning:
+`node_modules`, `vendor`, `.git`, `__pycache__`, `venv`, `.venv`, `dist`, `build`, `.cache`
 
 ### Default Behavior
 

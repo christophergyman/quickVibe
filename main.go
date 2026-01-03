@@ -6,9 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/chezu/claude-quick/internal/config"
-	"github.com/chezu/claude-quick/internal/devcontainer"
-	"github.com/chezu/claude-quick/internal/tui"
+	"github.com/christophergyman/claude-quick/internal/config"
+	"github.com/christophergyman/claude-quick/internal/devcontainer"
+	"github.com/christophergyman/claude-quick/internal/tui"
 )
 
 func main() {
@@ -26,10 +26,10 @@ func main() {
 	}
 
 	// Discover devcontainer projects
-	projects := devcontainer.Discover(cfg.SearchPaths, cfg.MaxDepth)
+	projects := devcontainer.Discover(cfg.SearchPaths, cfg.MaxDepth, cfg.ExcludedDirs)
 
 	// Create and run TUI
-	model := tui.New(projects)
+	model := tui.New(projects, cfg)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	finalModel, err := p.Run()

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chezu/claude-quick/internal/devcontainer"
+	"github.com/christophergyman/claude-quick/internal/devcontainer"
 )
 
 // RenderContainerSelect renders the container selection view

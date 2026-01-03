@@ -1,4 +1,4 @@
-module github.com/chezu/claude-quick
+module github.com/christophergyman/claude-quick
 
 go 1.25.1
 

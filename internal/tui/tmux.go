@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/chezu/claude-quick/internal/tmux"
+	"github.com/christophergyman/claude-quick/internal/tmux"
 )
 
 const newSessionOption = "[+ New Session]"

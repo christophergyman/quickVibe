@@ -5,8 +5,9 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/chezu/claude-quick/internal/devcontainer"
-	"github.com/chezu/claude-quick/internal/tmux"
+	"github.com/christophergyman/claude-quick/internal/config"
+	"github.com/christophergyman/claude-quick/internal/devcontainer"
+	"github.com/christophergyman/claude-quick/internal/tmux"
 )
 
 // State represents the current view state
@@ -27,6 +28,7 @@ const (
 	StateTmuxStopping
 	StateTmuxRestarting
 	StateError
+	StateShowConfig
 )
 
 // Model is the main Bubbletea model
@@ -43,6 +45,8 @@ type Model struct {
 	errHint         string
 	width           int
 	height          int
+	config          *config.Config
+	previousState   State
 }
 
 // Messages for async operations
@@ -57,13 +61,13 @@ type tmuxSessionStoppedMsg struct{}
 type tmuxSessionRestartedMsg struct{}
 
 // New creates a new Model with discovered projects
-func New(projects []devcontainer.Project) Model {
+func New(projects []devcontainer.Project, cfg *config.Config) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = SpinnerStyle
 
 	ti := textinput.New()
-	ti.Placeholder = "session-name"
+	ti.Placeholder = cfg.DefaultSessionName
 	ti.CharLimit = 50
 	ti.Width = 30
 
@@ -72,6 +76,7 @@ func New(projects []devcontainer.Project) Model {
 		projects:  projects,
 		spinner:   s,
 		textInput: ti,
+		config:    cfg,
 	}
 }
 
@@ -314,13 +319,14 @@ func (m Model) handleNewSessionInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "enter":
 		name := m.textInput.Value()
-		if name != "" {
-			m.state = StateAttaching
-			return m, tea.Batch(
-				m.spinner.Tick,
-				m.createTmuxSession(name),
-			)
+		if name == "" {
+			name = m.config.DefaultSessionName
 		}
+		m.state = StateAttaching
+		return m, tea.Batch(
+			m.spinner.Tick,
+			m.createTmuxSession(name),
+		)
 	}
 
 	// Pass other keys to text input

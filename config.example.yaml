@@ -1,0 +1,32 @@
+# Claude Quick Configuration
+# Copy this file to ~/.config/claude-quick/config.yaml
+
+# Directories to scan for devcontainer projects
+# Supports ~ for home directory expansion
+search_paths:
+  - ~/projects
+  - ~/work
+
+# Maximum directory depth to search (default: 3)
+max_depth: 4
+
+# Directories to skip during scanning
+# If not specified, defaults to the list below
+excluded_dirs:
+  - node_modules
+  - vendor
+  - .git
+  - __pycache__
+  - venv
+  - .venv
+  - dist
+  - build
+  - .cache
+
+# Default name for new tmux sessions (default: "main")
+# This is used when creating a new session without specifying a name
+default_session_name: main
+
+# Container startup timeout in seconds (default: 300)
+# Minimum: 30, Maximum: 1800
+container_timeout_seconds: 300
