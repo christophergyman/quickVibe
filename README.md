@@ -1,176 +1,85 @@
 # Claude Quick
 
-A terminal user interface for managing tmux sessions inside devcontainers.
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Claude Quick discovers devcontainer projects on your system, spins up containers, and provides an intuitive interface for creating and attaching to tmux sessions within them.
+A terminal UI for managing tmux sessions across your devcontainers.
 
-## Features
+<!-- Screenshot placeholder - Add a GIF or image here -->
+<!-- ![Claude Quick Demo](docs/demo.gif) -->
 
-- **Container Dashboard** - See all discovered devcontainers with real-time status (running/stopped)
-- **Multi-Container Support** - Manage multiple containers and switch between them easily
-- **Return to Dashboard** - Detaching from tmux (Ctrl+b d) returns you to the dashboard
-- **Container Management** - Start, stop, and restart devcontainers using the official CLI
-- **Tmux Integration** - List, create, stop, restart, and attach to tmux sessions inside containers
-- **Keyboard Navigation** - Vim-style keybindings (j/k) and arrow key support
-- **Configurable** - YAML configuration for search paths and scan depth
+## Quick Start
+
+```bash
+# Install
+go install github.com/christophergyman/claude-quick@latest
+
+# Run
+claude-quick
+```
 
 ## Requirements
 
-- Go 1.21+ (for building)
+- Go 1.25+
 - Docker
-- [devcontainer CLI](https://github.com/devcontainers/cli) - Install with:
-  ```bash
-  npm install -g @devcontainers/cli
-  ```
-- tmux installed inside your devcontainers
+- [devcontainer CLI](https://github.com/devcontainers/cli) (`npm install -g @devcontainers/cli`)
+- tmux inside your devcontainers
 
 ## Installation
 
-### Build from Source
+**Go Install** (recommended)
+```bash
+go install github.com/christophergyman/claude-quick@latest
+```
 
+**Build from Source**
 ```bash
 git clone https://github.com/christophergyman/claude-quick.git
 cd claude-quick
 go build -o claude-quick .
 ```
 
-Optionally, add to your PATH by creating a symlink:
-
+**Build Script** (builds + symlinks to ~/.local/bin)
 ```bash
-mkdir -p ~/.local/bin
-ln -sf "$(pwd)/claude-quick" ~/.local/bin/claude-quick
-```
-
-### Go Install
-
-```bash
-go install github.com/christophergyman/claude-quick@latest
+./build.sh
 ```
 
 ## Usage
 
-Run the application:
-
-```bash
-claude-quick
-```
-
-### Workflow
-
-1. View all discovered devcontainers in the dashboard with status indicators:
-   - `●` (green) - Container is running
-   - `○` (red) - Container is stopped
-   - `?` - Container status unknown
-2. Select a container:
-   - **Running containers**: Jumps directly to tmux session selection
-   - **Stopped containers**: Starts the container first, then shows tmux sessions
-3. Choose an existing tmux session or create a new one
-4. Claude Quick attaches you to the tmux session
-5. **Detach from tmux** (Ctrl+b d) to return to the dashboard and manage other containers
+1. Launch `claude-quick` to see all discovered devcontainers
+2. Select a container (starts it if stopped)
+3. Choose or create a tmux session
+4. Detach with `Ctrl+b d` to return to the dashboard
 
 ### Keybindings
 
-#### Container Dashboard
-
 | Key | Action |
 |-----|--------|
-| `j` / `↓` | Move down |
-| `k` / `↑` | Move up |
-| `Enter` | Connect (start if stopped, then open tmux sessions) |
-| `x` | Stop container |
-| `r` | Restart container |
-| `R` | Refresh container status |
-| `?` | Show configuration |
-| `q` | Quit |
-| `Ctrl+C` | Quit |
-
-#### Tmux Session Selection
-
-| Key | Action |
-|-----|--------|
-| `j` / `↓` | Move down |
-| `k` / `↑` | Move up |
-| `Enter` | Select and attach to session |
-| `x` | Stop (kill) session |
-| `r` | Restart session |
-| `q` / `Esc` | Go back to container list |
-| `Ctrl+C` | Quit |
-
-#### New Session Input
-
-| Key | Action |
-|-----|--------|
-| `Enter` | Create session with entered name |
-| `Esc` | Cancel and go back |
-| `Ctrl+C` | Quit |
-
-#### Confirmation Dialogs
-
-| Key | Action |
-|-----|--------|
-| `y` | Confirm action |
-| `n` / `Esc` | Cancel |
-| `Ctrl+C` | Quit |
+| `j`/`k` or `↑`/`↓` | Navigate |
+| `Enter` | Select / Connect |
+| `x` | Stop container or session |
+| `r` | Restart |
+| `R` | Refresh status |
+| `?` | Show config |
+| `q` / `Esc` | Back / Quit |
 
 ## Configuration
 
-Claude Quick looks for a configuration file at `~/.config/claude-quick/config.yaml`.
-
-### Example Configuration
+Config file: `~/.config/claude-quick/config.yaml`
 
 ```yaml
-# Directories to scan for devcontainer projects
 search_paths:
   - ~/projects
   - ~/work
-  - ~/Documents/github
-
-# Maximum directory depth to search (default: 3)
-max_depth: 4
-
-# Directories to skip during scanning (defaults shown below)
-excluded_dirs:
-  - node_modules
-  - vendor
-  - .git
-  - __pycache__
-  - venv
-  - .venv
-  - dist
-  - build
-  - .cache
-
-# Default name for new tmux sessions (default: "main")
-default_session_name: dev
-
-# Container startup timeout in seconds (default: 300)
-container_timeout_seconds: 300
+max_depth: 3
+default_session_name: main
 ```
 
-### Configuration Options
+See [`config.example.yaml`](config.example.yaml) for all options.
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `search_paths` | list | `[~]` | Directories to scan for devcontainer projects |
-| `max_depth` | int | `3` | Maximum directory depth for scanning |
-| `excluded_dirs` | list | See below | Directories to skip during scanning |
-| `default_session_name` | string | `main` | Default name for new tmux sessions |
-| `container_timeout_seconds` | int | `300` | Timeout for container startup (30-1800) |
+## Nerd Font Support
 
-#### Default Excluded Directories
-
-By default, the following directories are skipped during scanning:
-`node_modules`, `vendor`, `.git`, `__pycache__`, `venv`, `.venv`, `dist`, `build`, `.cache`
-
-### Default Behavior
-
-Without a configuration file, Claude Quick searches your home directory with a max depth of 3.
-
-## Nerd Font Support for Claude CLI
-
-If you're using [Claude Code](https://claude.com/claude-code) inside your devcontainers, you'll need to configure your devcontainer for proper Nerd Font rendering. Without this, Unicode glyphs (like the Claude logo) won't display correctly.
-
-Add the following to your `devcontainer.json`:
+For proper Unicode rendering in devcontainers (e.g., Claude CLI), add to your `devcontainer.json`:
 
 ```json
 {
@@ -180,17 +89,6 @@ Add the following to your `devcontainer.json`:
   }
 }
 ```
-
-**Why is this needed?** The terminal is rendered by your host machine (which has Nerd Fonts installed), but applications inside the container need `LANG=en_US.UTF-8` to know they can output UTF-8/Unicode characters.
-
-## How It Works
-
-1. Scans configured paths for `devcontainer.json` files (skips hidden directories, node_modules, vendor, etc.)
-2. Queries Docker for container status (running/stopped) for each discovered project
-3. Uses `devcontainer up` to start stopped containers
-4. Checks that tmux is available in the container
-5. Queries tmux inside the container for existing sessions
-6. Attaches to tmux as a subprocess, allowing you to return to the dashboard when you detach
 
 ## License
 
