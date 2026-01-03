@@ -7,51 +7,6 @@ import (
 	"github.com/christophergyman/claude-quick/internal/devcontainer"
 )
 
-// RenderContainerSelect renders the container selection view
-func RenderContainerSelect(projects []devcontainer.Project, cursor int, width int) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	subtitle := SubtitleStyle.Render("Select Dev Container")
-
-	b.WriteString(title)
-	b.WriteString("\n")
-	b.WriteString(subtitle)
-	b.WriteString("\n\n")
-
-	if len(projects) == 0 {
-		b.WriteString(ErrorStyle.Render("No devcontainer projects found."))
-		b.WriteString("\n\n")
-		b.WriteString(DimmedStyle.Render("Add search paths to: "))
-		b.WriteString("\n")
-		b.WriteString(DimmedStyle.Render("~/.config/claude-quick/config.yaml"))
-		return b.String()
-	}
-
-	for i, project := range projects {
-		var line string
-		if i == cursor {
-			line = Cursor() + SelectedStyle.Render(project.Name)
-		} else {
-			line = NoCursor() + ItemStyle.Render(project.Name)
-		}
-		b.WriteString(line)
-		b.WriteString("\n")
-
-		// Show path on next line (dimmed)
-		pathLine := "    " + DimmedStyle.Render(truncatePath(project.Path, width-6))
-		b.WriteString(pathLine)
-		b.WriteString("\n")
-	}
-
-	b.WriteString("\n")
-	b.WriteString(HelpStyle.Render("↑/↓: Navigate  Enter: Select  x: Stop  r: Restart  ?: Config  q: Quit"))
-	b.WriteString("\n")
-	b.WriteString(HelpStyle.Render("Tip: Detach from tmux with Ctrl+b d"))
-
-	return b.String()
-}
-
 // RenderContainerStarting renders the loading state while container starts
 func RenderContainerStarting(projectName string, spinnerView string) string {
 	var b strings.Builder
@@ -155,4 +110,86 @@ func truncatePath(path string, maxLen int) string {
 		return path
 	}
 	return "..." + path[len(path)-maxLen+3:]
+}
+
+// RenderRefreshingStatus renders the loading state while refreshing container status
+func RenderRefreshingStatus(spinnerView string) string {
+	var b strings.Builder
+
+	title := TitleStyle.Render("claude-quick")
+	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	b.WriteString(SpinnerStyle.Render(spinnerView))
+	b.WriteString(" Refreshing container status...")
+
+	return b.String()
+}
+
+// RenderDashboard renders the container dashboard with status indicators
+func RenderDashboard(projects []devcontainer.ProjectWithStatus, cursor int, width int) string {
+	var b strings.Builder
+
+	title := TitleStyle.Render("claude-quick")
+	subtitle := SubtitleStyle.Render("Container Dashboard")
+
+	b.WriteString(title)
+	b.WriteString("\n")
+	b.WriteString(subtitle)
+	b.WriteString("\n\n")
+
+	if len(projects) == 0 {
+		b.WriteString(ErrorStyle.Render("No devcontainer projects found."))
+		b.WriteString("\n\n")
+		b.WriteString(DimmedStyle.Render("Add search paths to: "))
+		b.WriteString("\n")
+		b.WriteString(DimmedStyle.Render("~/.config/claude-quick/config.yaml"))
+		return b.String()
+	}
+
+	for i, project := range projects {
+		// Status indicator
+		statusIcon := getStatusIcon(project.Status)
+
+		// Session info for running containers
+		sessionInfo := ""
+		if project.Status == devcontainer.StatusRunning && project.SessionCount > 0 {
+			sessionInfo = fmt.Sprintf(" [%d sessions]", project.SessionCount)
+		}
+
+		display := fmt.Sprintf("%s %s%s", statusIcon, project.Name, sessionInfo)
+
+		var line string
+		if i == cursor {
+			line = Cursor() + SelectedStyle.Render(display)
+		} else {
+			line = NoCursor() + ItemStyle.Render(display)
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+
+		// Show path on next line (dimmed)
+		pathLine := "    " + DimmedStyle.Render(truncatePath(project.Path, width-6))
+		b.WriteString(pathLine)
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(HelpStyle.Render("↑/↓: Navigate  Enter: Connect  x: Stop  r: Restart  R: Refresh  ?: Config  q: Quit"))
+	b.WriteString("\n")
+	b.WriteString(HelpStyle.Render("Tip: Detach from tmux with Ctrl+b d to return here"))
+
+	return b.String()
+}
+
+// getStatusIcon returns a visual indicator for container status
+func getStatusIcon(status devcontainer.ContainerStatus) string {
+	switch status {
+	case devcontainer.StatusRunning:
+		return SuccessStyle.Render("●")
+	case devcontainer.StatusStopped:
+		return ErrorStyle.Render("○")
+	default:
+		return DimmedStyle.Render("?")
+	}
 }

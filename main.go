@@ -26,26 +26,13 @@ func main() {
 	}
 
 	// Create TUI with async discovery - shows spinner while searching for projects
+	// Tmux attachment happens within the TUI via tea.ExecProcess
+	// When user detaches (Ctrl+b d), they return to the TUI dashboard
 	model := tui.NewWithDiscovery(cfg)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
-	finalModel, err := p.Run()
-	if err != nil {
+	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
 		os.Exit(1)
-	}
-
-	// After TUI exits, check if we should attach to a tmux session
-	if m, ok := finalModel.(tui.Model); ok {
-		projectPath, sessionName, shouldAttach := m.GetAttachInfo()
-		if shouldAttach {
-			// Execute into container and attach to tmux
-			// This replaces the current process
-			err := devcontainer.ExecInteractive(projectPath, []string{"tmux", "attach", "-t", sessionName})
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error attaching to tmux: %v\n", err)
-				os.Exit(1)
-			}
-		}
 	}
 }

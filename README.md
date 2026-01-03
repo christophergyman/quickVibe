@@ -6,7 +6,9 @@ Claude Quick discovers devcontainer projects on your system, spins up containers
 
 ## Features
 
-- **Project Discovery** - Automatically finds devcontainer projects across configured search paths
+- **Container Dashboard** - See all discovered devcontainers with real-time status (running/stopped)
+- **Multi-Container Support** - Manage multiple containers and switch between them easily
+- **Return to Dashboard** - Detaching from tmux (Ctrl+b d) returns you to the dashboard
 - **Container Management** - Start, stop, and restart devcontainers using the official CLI
 - **Tmux Integration** - List, create, stop, restart, and attach to tmux sessions inside containers
 - **Keyboard Navigation** - Vim-style keybindings (j/k) and arrow key support
@@ -55,22 +57,30 @@ claude-quick
 
 ### Workflow
 
-1. Select a devcontainer project from the discovered list
-2. Wait for the container to start
+1. View all discovered devcontainers in the dashboard with status indicators:
+   - `●` (green) - Container is running
+   - `○` (red) - Container is stopped
+   - `?` - Container status unknown
+2. Select a container:
+   - **Running containers**: Jumps directly to tmux session selection
+   - **Stopped containers**: Starts the container first, then shows tmux sessions
 3. Choose an existing tmux session or create a new one
-4. Claude Quick attaches you directly to the tmux session inside the container
+4. Claude Quick attaches you to the tmux session
+5. **Detach from tmux** (Ctrl+b d) to return to the dashboard and manage other containers
 
 ### Keybindings
 
-#### Container Selection
+#### Container Dashboard
 
 | Key | Action |
 |-----|--------|
 | `j` / `↓` | Move down |
 | `k` / `↑` | Move up |
-| `Enter` | Select and start container |
+| `Enter` | Connect (start if stopped, then open tmux sessions) |
 | `x` | Stop container |
 | `r` | Restart container |
+| `R` | Refresh container status |
+| `?` | Show configuration |
 | `q` | Quit |
 | `Ctrl+C` | Quit |
 
@@ -176,10 +186,11 @@ Add the following to your `devcontainer.json`:
 ## How It Works
 
 1. Scans configured paths for `devcontainer.json` files (skips hidden directories, node_modules, vendor, etc.)
-2. Uses `devcontainer up` to ensure the container is running
-3. Checks that tmux is available in the container
-4. Queries tmux inside the container for existing sessions
-5. On selection, executes `devcontainer exec` to attach to the tmux session
+2. Queries Docker for container status (running/stopped) for each discovered project
+3. Uses `devcontainer up` to start stopped containers
+4. Checks that tmux is available in the container
+5. Queries tmux inside the container for existing sessions
+6. Attaches to tmux as a subprocess, allowing you to return to the dashboard when you detach
 
 ## License
 

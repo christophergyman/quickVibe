@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -15,6 +16,23 @@ import (
 type Project struct {
 	Name string // Project directory name
 	Path string // Full path to the project (workspace folder)
+}
+
+// ContainerStatus represents the runtime status of a devcontainer
+type ContainerStatus string
+
+const (
+	StatusRunning ContainerStatus = "running"
+	StatusStopped ContainerStatus = "stopped"
+	StatusUnknown ContainerStatus = "unknown"
+)
+
+// ProjectWithStatus combines project discovery with runtime status
+type ProjectWithStatus struct {
+	Project
+	Status       ContainerStatus
+	ContainerID  string
+	SessionCount int
 }
 
 // Discover finds all devcontainer projects in the given search paths
@@ -145,6 +163,72 @@ func Restart(projectPath string) error {
 		return fmt.Errorf("failed to restart container: %s", stderr.String())
 	}
 	return nil
+}
+
+// GetContainerStatus checks if a container is running for the given project path
+func GetContainerStatus(projectPath string) (ContainerStatus, string) {
+	// Check running containers first
+	findCmd := exec.Command("docker", "ps", "-q",
+		"--filter", fmt.Sprintf("label=devcontainer.local_folder=%s", projectPath))
+	output, err := findCmd.Output()
+	if err != nil {
+		return StatusUnknown, ""
+	}
+
+	containerID := strings.TrimSpace(string(output))
+	if containerID != "" {
+		return StatusRunning, containerID
+	}
+
+	// Check stopped containers
+	findCmd = exec.Command("docker", "ps", "-a", "-q",
+		"--filter", fmt.Sprintf("label=devcontainer.local_folder=%s", projectPath),
+		"--filter", "status=exited")
+	output, err = findCmd.Output()
+	if err != nil {
+		return StatusUnknown, ""
+	}
+
+	containerID = strings.TrimSpace(string(output))
+	if containerID != "" {
+		return StatusStopped, containerID
+	}
+
+	return StatusUnknown, ""
+}
+
+// GetAllProjectsStatus returns all projects with their current Docker status
+func GetAllProjectsStatus(projects []Project) []ProjectWithStatus {
+	result := make([]ProjectWithStatus, len(projects))
+	var wg sync.WaitGroup
+
+	for i, p := range projects {
+		wg.Add(1)
+		go func(idx int, proj Project) {
+			defer wg.Done()
+
+			status, containerID := GetContainerStatus(proj.Path)
+			sessionCount := 0
+
+			// Only count sessions if container is running
+			if status == StatusRunning {
+				sessions, err := ListTmuxSessions(proj.Path)
+				if err == nil {
+					sessionCount = len(sessions)
+				}
+			}
+
+			result[idx] = ProjectWithStatus{
+				Project:      proj,
+				Status:       status,
+				ContainerID:  containerID,
+				SessionCount: sessionCount,
+			}
+		}(i, p)
+	}
+
+	wg.Wait()
+	return result
 }
 
 // ExecInteractive executes a command inside the devcontainer interactively

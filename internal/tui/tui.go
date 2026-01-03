@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os/exec"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,7 +17,8 @@ type State int
 
 const (
 	StateDiscovering State = iota
-	StateContainerSelect
+	StateRefreshingStatus
+	StateDashboard
 	StateContainerStarting
 	StateConfirmStop
 	StateConfirmRestart
@@ -37,6 +40,7 @@ const (
 type Model struct {
 	state           State
 	projects        []devcontainer.Project
+	projectsStatus  []devcontainer.ProjectWithStatus
 	selectedProject *devcontainer.Project
 	tmuxSessions    []tmux.Session
 	selectedSession *tmux.Session
@@ -55,15 +59,18 @@ type Model struct {
 type projectsDiscoveredMsg struct {
 	projects []devcontainer.Project
 }
+type containerStatusRefreshedMsg struct {
+	statuses []devcontainer.ProjectWithStatus
+}
 type containerStartedMsg struct{}
 type containerErrorMsg struct{ err error }
 type tmuxSessionsLoadedMsg struct{ sessions []string }
 type tmuxSessionCreatedMsg struct{}
-type attachMsg struct{ sessionName string }
 type containerStoppedMsg struct{}
 type containerRestartedMsg struct{}
 type tmuxSessionStoppedMsg struct{}
 type tmuxSessionRestartedMsg struct{}
+type tmuxDetachedMsg struct{}
 
 // New creates a new Model with discovered projects
 func New(projects []devcontainer.Project, cfg *config.Config) Model {
@@ -77,7 +84,7 @@ func New(projects []devcontainer.Project, cfg *config.Config) Model {
 	ti.Width = 30
 
 	return Model{
-		state:     StateContainerSelect,
+		state:     StateDashboard,
 		projects:  projects,
 		spinner:   s,
 		textInput: ti,
@@ -125,6 +132,14 @@ func (m Model) discoverProjects() tea.Cmd {
 	}
 }
 
+// refreshProjectStatus returns a command that refreshes container status for all projects
+func (m Model) refreshProjectStatus() tea.Cmd {
+	return func() tea.Msg {
+		statuses := devcontainer.GetAllProjectsStatus(m.projects)
+		return containerStatusRefreshedMsg{statuses: statuses}
+	}
+}
+
 // Update implements tea.Model
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -143,9 +158,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case projectsDiscoveredMsg:
 		m.projects = msg.projects
-		m.state = StateContainerSelect
+		m.state = StateRefreshingStatus
 		m.cursor = 0
+		return m, tea.Batch(m.spinner.Tick, m.refreshProjectStatus())
+
+	case containerStatusRefreshedMsg:
+		m.projectsStatus = msg.statuses
+		m.state = StateDashboard
 		return m, nil
+
+	case tmuxDetachedMsg:
+		// User detached from tmux, return to dashboard with status refresh
+		m.state = StateRefreshingStatus
+		m.selectedProject = nil
+		m.cursor = 0
+		return m, tea.Batch(m.spinner.Tick, m.refreshProjectStatus())
 
 	case containerStartedMsg:
 		return m.handleContainerStarted()
@@ -168,9 +195,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.attachToSession(sessionName)
 
 	case containerStoppedMsg, containerRestartedMsg:
-		m.state = StateContainerSelect
+		// Refresh status after container operation
+		m.state = StateRefreshingStatus
 		m.selectedProject = nil
-		return m, nil
+		return m, tea.Batch(m.spinner.Tick, m.refreshProjectStatus())
 
 	case tmuxSessionStoppedMsg, tmuxSessionRestartedMsg:
 		// Reload tmux sessions after stop/restart with loading animation
@@ -179,9 +207,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = StateLoadingTmuxSessions
 		return m, tea.Batch(m.spinner.Tick, m.loadTmuxSessions())
 
-	case attachMsg:
-		// This triggers the actual attachment - we exit the TUI
-		return m, tea.Quit
 	}
 
 	// Update text input if in input state
@@ -197,8 +222,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleKeyPress processes keyboard input based on current state
 func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.state {
-	case StateContainerSelect:
-		return m.handleContainerSelectKey(msg)
+	case StateDashboard:
+		return m.handleDashboardKey(msg)
 	case StateConfirmStop, StateConfirmRestart:
 		return m.handleConfirmKey(msg)
 	case StateConfirmTmuxStop, StateConfirmTmuxRestart:
@@ -209,7 +234,7 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleNewSessionInputKey(msg)
 	case StateError:
 		// Any key returns to container select
-		m.state = StateContainerSelect
+		m.state = StateDashboard
 		m.err = nil
 		return m, nil
 	case StateShowConfig:
@@ -220,7 +245,7 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleContainerSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -231,13 +256,19 @@ func (m Model) handleContainerSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "down", "j":
-		if m.cursor < len(m.projects)-1 {
+		if m.cursor < len(m.projectsStatus)-1 {
 			m.cursor++
 		}
 
 	case "enter":
-		if len(m.projects) > 0 {
-			m.selectedProject = &m.projects[m.cursor]
+		if len(m.projectsStatus) > 0 {
+			m.selectedProject = &m.projectsStatus[m.cursor].Project
+			if m.projectsStatus[m.cursor].Status == devcontainer.StatusRunning {
+				// Container is running, load tmux sessions
+				m.state = StateLoadingTmuxSessions
+				return m, tea.Batch(m.spinner.Tick, m.loadTmuxSessions())
+			}
+			// Container is stopped or unknown, start it
 			m.state = StateContainerStarting
 			return m, tea.Batch(
 				m.spinner.Tick,
@@ -246,16 +277,21 @@ func (m Model) handleContainerSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "x":
-		if len(m.projects) > 0 {
-			m.selectedProject = &m.projects[m.cursor]
+		if len(m.projectsStatus) > 0 {
+			m.selectedProject = &m.projectsStatus[m.cursor].Project
 			m.state = StateConfirmStop
 		}
 
 	case "r":
-		if len(m.projects) > 0 {
-			m.selectedProject = &m.projects[m.cursor]
+		if len(m.projectsStatus) > 0 {
+			m.selectedProject = &m.projectsStatus[m.cursor].Project
 			m.state = StateConfirmRestart
 		}
+
+	case "R":
+		// Manual refresh
+		m.state = StateRefreshingStatus
+		return m, tea.Batch(m.spinner.Tick, m.refreshProjectStatus())
 
 	case "?":
 		m.previousState = m.state
@@ -275,7 +311,7 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.state = StateContainerRestarting
 		return m, tea.Batch(m.spinner.Tick, m.restartContainer())
 	case "n", "N", "esc":
-		m.state = StateContainerSelect
+		m.state = StateDashboard
 		m.selectedProject = nil
 		return m, nil
 	case "ctrl+c":
@@ -309,7 +345,7 @@ func (m Model) handleTmuxSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "esc":
 		// Go back to container select
-		m.state = StateContainerSelect
+		m.state = StateDashboard
 		m.cursor = 0
 		m.selectedProject = nil
 		return m, nil
@@ -502,16 +538,20 @@ func (m Model) createTmuxSession(name string) tea.Cmd {
 	}
 }
 
-// attachToSession prepares to attach to a tmux session
+// attachToSession attaches to a tmux session using tea.ExecProcess
+// This suspends the TUI, runs tmux as a subprocess, and returns to TUI on detach
 func (m Model) attachToSession(sessionName string) (tea.Model, tea.Cmd) {
 	m.state = StateAttaching
-	// Store the session name for use after quit
-	return m, tea.Sequence(
-		tea.Batch(m.spinner.Tick),
-		func() tea.Msg {
-			return attachMsg{sessionName: sessionName}
-		},
-	)
+
+	// Build the command to attach to tmux
+	c := exec.Command("devcontainer", "exec", "--workspace-folder",
+		m.selectedProject.Path, "tmux", "attach", "-t", sessionName)
+
+	// Use tea.ExecProcess to run tmux and return to TUI when done
+	return m, tea.ExecProcess(c, func(err error) tea.Msg {
+		// This is called when tmux detaches or exits
+		return tmuxDetachedMsg{}
+	})
 }
 
 // View implements tea.Model
@@ -520,8 +560,11 @@ func (m Model) View() string {
 	case StateDiscovering:
 		return RenderDiscovering(m.spinner.View())
 
-	case StateContainerSelect:
-		return RenderContainerSelect(m.projects, m.cursor, m.width)
+	case StateRefreshingStatus:
+		return RenderRefreshingStatus(m.spinner.View())
+
+	case StateDashboard:
+		return RenderDashboard(m.projectsStatus, m.cursor, m.width)
 
 	case StateContainerStarting:
 		projectName := ""
@@ -626,20 +669,6 @@ func (m Model) View() string {
 	}
 
 	return ""
-}
-
-// GetAttachInfo returns the info needed to attach after the TUI exits
-func (m Model) GetAttachInfo() (projectPath, sessionName string, shouldAttach bool) {
-	if m.state != StateAttaching || m.selectedProject == nil {
-		return "", "", false
-	}
-
-	sessionName = m.textInput.Value()
-	if m.cursor < len(m.tmuxSessions) {
-		sessionName = m.tmuxSessions[m.cursor].Name
-	}
-
-	return m.selectedProject.Path, sessionName, true
 }
 
 // tmuxNotFoundError indicates tmux is not available in the container
