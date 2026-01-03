@@ -1,22 +1,21 @@
 {
   "name": "claude-quick",
   "build": {
-    "dockerfile": "Dockerfile"
+    "dockerfile": "Dockerfile",
+    "context": ".."
   },
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "lts"
-    }
+    "ghcr.io/devcontainers/features/node:1": {}
   },
-  "postCreateCommand": "npm install -g @devcontainers/cli && go mod download",
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code",
   "customizations": {
     "vscode": {
       "extensions": [
         "golang.go"
       ],
       "settings": {
-        "go.useLanguageServer": true
+        "go.useLanguageServer": true,
+        "terminal.integrated.fontFamily": "'JetBrainsMono Nerd Font', 'JetBrainsMono NF', monospace"
       }
     }
   },
