@@ -97,16 +97,18 @@ func NoCursor() string {
 
 // RenderMascot returns the cute mascot with red shoes
 func RenderMascot() string {
-	// Simple cute figure - compact for header use
-	//    ◠‿◠
-	//   /|  |\
-	//    |  |
-	//   █    █  <- red shoes
+	// Ghost Claude - friendly rounded shape with red shoes
+	//  ╭───╮
+	//  │◠◡◠│
+	//  ╰─┬─╯
+	//   ╱ ╲
+	//  ▀   ▀  <- red shoes
 
-	face := TitleStyle.Render("  ◠‿◠")
-	body := DimmedStyle.Render(" /|  |\\")
-	legs := DimmedStyle.Render("  |  |")
-	shoes := ShoeStyle.Render(" █    █")
+	line1 := DimmedStyle.Render(" ╭───╮")
+	line2 := DimmedStyle.Render(" │") + TitleStyle.Render("◠◡◠") + DimmedStyle.Render("│")
+	line3 := DimmedStyle.Render(" ╰─┬─╯")
+	line4 := DimmedStyle.Render("  ╱ ╲")
+	line5 := " " + ShoeStyle.Render("▀") + "   " + ShoeStyle.Render("▀")
 
-	return face + "\n" + body + "\n" + legs + "\n" + shoes
+	return line1 + "\n" + line2 + "\n" + line3 + "\n" + line4 + "\n" + line5
 }
