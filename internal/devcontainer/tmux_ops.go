@@ -34,13 +34,25 @@ func ListTmuxSessions(projectPath string) ([]string, error) {
 
 // CreateTmuxSession creates a new tmux session in the container
 func CreateTmuxSession(projectPath, sessionName string) error {
+	// Read credentials BEFORE creating session so they're available to the initial shell
+	creds := readCredentialFile(projectPath)
+
+	// Build tmux command with -e flags to inject env vars at session creation time
+	// This ensures the initial shell gets the credentials (setenv only affects new windows)
+	args := []string{"new-session", "-d", "-s", sessionName}
+	for name, value := range creds {
+		args = append(args, "-e", fmt.Sprintf("%s=%s", name, value))
+	}
+
 	if err := execInContainerWithStderr(projectPath, "failed to create tmux session",
-		"tmux", "new-session", "-d", "-s", sessionName); err != nil {
+		append([]string{"tmux"}, args...)...); err != nil {
 		return err
 	}
 
-	// Inject auth credentials into tmux session environment
-	// Using setenv makes env vars available to all windows/panes in the session
+	// Apply Anthropic-themed styling to the session
+	applyTmuxStyling(projectPath, sessionName)
+
+	// Also set via setenv for any new windows/panes created later
 	injectTmuxSessionEnv(projectPath, sessionName)
 
 	return nil
@@ -111,4 +123,32 @@ func HasTmux(projectPath string) bool {
 func KillTmuxSession(projectPath, sessionName string) error {
 	return execInContainerWithStderr(projectPath, "failed to kill tmux session",
 		"tmux", "kill-session", "-t", sessionName)
+}
+
+// applyTmuxStyling applies Anthropic-themed styling to a tmux session.
+// Uses orange (#D97706) as the primary color with git branch display.
+func applyTmuxStyling(projectPath, sessionName string) {
+	// Status bar colors - Anthropic orange
+	execInContainer(projectPath, "tmux", "set-option", "-t", sessionName, "status-style", "bg=#D97706,fg=#FFFFFF")
+
+	// Status left: session name with padding
+	execInContainer(projectPath, "tmux", "set-option", "-t", sessionName, "status-left", " #S ")
+	execInContainer(projectPath, "tmux", "set-option", "-t", sessionName, "status-left-style", "bg=#B45309,fg=#FFFFFF,bold")
+
+	// Status right: git branch + window/pane info
+	execInContainer(projectPath, "tmux", "set-option", "-t", sessionName, "status-right",
+		" #(git -C #{pane_current_path} rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'no-branch') │ #I:#P ")
+	execInContainer(projectPath, "tmux", "set-option", "-t", sessionName, "status-right-style", "bg=#B45309,fg=#FFFFFF")
+
+	// Current window styling (stands out in window list)
+	execInContainer(projectPath, "tmux", "set-option", "-t", sessionName, "window-status-current-style", "bg=#FFFFFF,fg=#D97706,bold")
+	execInContainer(projectPath, "tmux", "set-option", "-t", sessionName, "window-status-current-format", " #I:#W ")
+
+	// Other windows styling
+	execInContainer(projectPath, "tmux", "set-option", "-t", sessionName, "window-status-style", "fg=#FFF7ED")
+	execInContainer(projectPath, "tmux", "set-option", "-t", sessionName, "window-status-format", " #I:#W ")
+
+	// Pane border colors for consistency
+	execInContainer(projectPath, "tmux", "set-option", "-t", sessionName, "pane-border-style", "fg=#D97706")
+	execInContainer(projectPath, "tmux", "set-option", "-t", sessionName, "pane-active-border-style", "fg=#F97316")
 }
