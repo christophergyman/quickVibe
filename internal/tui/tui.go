@@ -35,8 +35,10 @@ const (
 	StateLoadingTmuxSessions
 	StateError
 	StateShowConfig
-	StateNewWorktreeInput // Text input for new worktree branch name
-	StateCreatingWorktree // Creating new worktree
+	StateNewWorktreeInput    // Text input for new worktree branch name
+	StateCreatingWorktree    // Creating new worktree
+	StateConfirmDeleteWorktree // Confirmation for deleting worktree
+	StateDeletingWorktree    // Deleting worktree
 )
 
 // Model is the main Bubbletea model
@@ -78,6 +80,7 @@ type tmuxDetachedMsg struct{}
 type worktreeCreatedMsg struct {
 	worktreePath string
 }
+type worktreeDeletedMsg struct{}
 
 // New creates a new Model with discovered instances
 func New(instances []devcontainer.ContainerInstance, cfg *config.Config) Model {
@@ -231,6 +234,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = StateDiscovering
 		return m, tea.Batch(m.spinner.Tick, m.discoverInstances())
 
+	case worktreeDeletedMsg:
+		// Worktree deleted, refresh instances
+		m.state = StateDiscovering
+		m.selectedInstance = nil
+		return m, tea.Batch(m.spinner.Tick, m.discoverInstances())
+
 	}
 
 	// Update text input if in input state
@@ -257,6 +266,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDashboardKey(msg)
 	case StateConfirmStop, StateConfirmRestart:
 		return m.handleConfirmKey(msg)
+	case StateConfirmDeleteWorktree:
+		return m.handleConfirmDeleteWorktreeKey(msg)
 	case StateConfirmTmuxStop, StateConfirmTmuxRestart:
 		return m.handleTmuxConfirmKey(msg)
 	case StateTmuxSelect:
@@ -342,6 +353,27 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.worktreeInput.SetValue("")
 			m.worktreeInput.Focus()
 			return m, textinput.Blink
+		}
+
+	case "d":
+		// Delete worktree - only for non-main worktrees
+		if len(m.instancesStatus) > 0 {
+			selected := &m.instancesStatus[m.cursor].ContainerInstance
+			// Only allow deleting non-main worktrees
+			if selected.Worktree == nil {
+				m.state = StateError
+				m.err = fmt.Errorf("cannot delete: not a git worktree")
+				m.errHint = "Press any key to go back"
+				return m, nil
+			}
+			if selected.Worktree.IsMain {
+				m.state = StateError
+				m.err = fmt.Errorf("cannot delete the main worktree")
+				m.errHint = "Press any key to go back"
+				return m, nil
+			}
+			m.selectedInstance = selected
+			m.state = StateConfirmDeleteWorktree
 		}
 
 	case "?":
@@ -512,6 +544,34 @@ func (m Model) handleNewWorktreeInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.worktreeInput, cmd = m.worktreeInput.Update(msg)
 	return m, cmd
+}
+
+func (m Model) handleConfirmDeleteWorktreeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		m.state = StateDeletingWorktree
+		return m, tea.Batch(m.spinner.Tick, m.deleteWorktree())
+	case "n", "N", "esc":
+		m.state = StateDashboard
+		m.selectedInstance = nil
+		return m, nil
+	case "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// deleteWorktree removes the selected git worktree
+func (m Model) deleteWorktree() tea.Cmd {
+	return func() tea.Msg {
+		if m.selectedInstance == nil {
+			return containerErrorMsg{err: fmt.Errorf("no worktree selected")}
+		}
+		if err := devcontainer.RemoveWorktree(m.selectedInstance.Path); err != nil {
+			return containerErrorMsg{err: err}
+		}
+		return worktreeDeletedMsg{}
+	}
 }
 
 // createWorktree creates a new git worktree with the specified branch
@@ -774,6 +834,20 @@ func (m Model) View() string {
 	case StateCreatingWorktree:
 		branchName := m.worktreeInput.Value()
 		return RenderCreatingWorktree(branchName, m.spinner.View())
+
+	case StateConfirmDeleteWorktree:
+		branchName := ""
+		if m.selectedInstance != nil && m.selectedInstance.Worktree != nil {
+			branchName = m.selectedInstance.Worktree.Branch
+		}
+		return RenderConfirmDeleteWorktree(branchName)
+
+	case StateDeletingWorktree:
+		branchName := ""
+		if m.selectedInstance != nil && m.selectedInstance.Worktree != nil {
+			branchName = m.selectedInstance.Worktree.Branch
+		}
+		return RenderDeletingWorktree(branchName, m.spinner.View())
 
 	case StateError:
 		return RenderError(m.err, m.errHint)

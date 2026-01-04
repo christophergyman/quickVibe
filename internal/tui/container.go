@@ -176,7 +176,9 @@ func RenderDashboard(instances []devcontainer.ContainerInstanceWithStatus, curso
 	}
 
 	b.WriteString("\n")
-	b.WriteString(HelpStyle.Render("↑/↓: Navigate  Enter: Connect  n: New Worktree  x: Stop  r: Restart  R: Refresh  ?: Config  q: Quit"))
+	b.WriteString(HelpStyle.Render("↑/↓: Navigate  Enter: Connect  n: New Worktree  d: Delete Worktree"))
+	b.WriteString("\n")
+	b.WriteString(HelpStyle.Render("x: Stop  r: Restart  R: Refresh  ?: Config  q: Quit"))
 	b.WriteString("\n")
 	b.WriteString(HelpStyle.Render("Tip: Detach from tmux with Ctrl+b d to return here"))
 
@@ -236,6 +238,44 @@ func RenderCreatingWorktree(branchName string, spinnerView string) string {
 	b.WriteString("...")
 	b.WriteString("\n\n")
 	b.WriteString(DimmedStyle.Render("Running git worktree add..."))
+
+	return b.String()
+}
+
+// RenderConfirmDeleteWorktree renders the confirmation dialog for deleting a worktree
+func RenderConfirmDeleteWorktree(branchName string) string {
+	var b strings.Builder
+
+	title := TitleStyle.Render("claude-quick")
+	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	b.WriteString(ErrorStyle.Render("Delete worktree?"))
+	b.WriteString("\n\n")
+	b.WriteString("Branch: ")
+	b.WriteString(SuccessStyle.Render(branchName))
+	b.WriteString("\n\n")
+	b.WriteString(DimmedStyle.Render("This will remove the worktree directory and branch"))
+	b.WriteString("\n\n")
+	b.WriteString(HelpStyle.Render("y: Confirm  n/Esc: Cancel"))
+
+	return b.String()
+}
+
+// RenderDeletingWorktree renders the loading state while deleting a worktree
+func RenderDeletingWorktree(branchName string, spinnerView string) string {
+	var b strings.Builder
+
+	title := TitleStyle.Render("claude-quick")
+	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	b.WriteString(SpinnerStyle.Render(spinnerView))
+	b.WriteString(" Deleting worktree ")
+	b.WriteString(SuccessStyle.Render(branchName))
+	b.WriteString("...")
+	b.WriteString("\n\n")
+	b.WriteString(DimmedStyle.Render("Running git worktree remove..."))
 
 	return b.String()
 }
