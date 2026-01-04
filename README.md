@@ -5,8 +5,7 @@
 
 A terminal UI for managing tmux sessions across your devcontainers.
 
-<!-- Screenshot placeholder - Add a GIF or image here -->
-<!-- ![Claude Quick Demo](docs/demo.gif) -->
+![Claude Quick](claude-quick-pic.png)
 
 ## Quick Start
 
