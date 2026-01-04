@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -55,10 +56,15 @@ func (m Model) startContainer() tea.Cmd {
 			result := m.config.Auth.Resolve(m.selectedInstance.Name)
 			if len(result.Credentials) > 0 {
 				// Write credentials to file in project directory
-				auth.WriteCredentialFile(m.selectedInstance.Path, result.Credentials)
+				if err := auth.WriteCredentialFile(m.selectedInstance.Path, result.Credentials); err != nil {
+					authWarning = fmt.Sprintf("failed to write credentials: %v", err)
+				}
 			}
 			if result.HasErrors() {
-				authWarning = result.ErrorSummary()
+				if authWarning != "" {
+					authWarning += "; "
+				}
+				authWarning += result.ErrorSummary()
 			}
 		}
 
