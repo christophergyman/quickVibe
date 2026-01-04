@@ -7,97 +7,95 @@ import (
 	"github.com/christophergyman/claude-quick/internal/devcontainer"
 )
 
+// renderWithHeader creates a strings.Builder with the standard title header
+// If subtitle is provided, it's also rendered below the title
+func renderWithHeader(subtitle string) *strings.Builder {
+	var b strings.Builder
+	b.WriteString(TitleStyle.Render("claude-quick"))
+	if subtitle != "" {
+		b.WriteString("\n")
+		b.WriteString(SubtitleStyle.Render(subtitle))
+	}
+	b.WriteString("\n\n")
+	return &b
+}
+
 // RenderContainerStarting renders the loading state while container starts
 func RenderContainerStarting(projectName string, spinnerView string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
+	b := renderWithHeader("")
 	b.WriteString(SpinnerStyle.Render(spinnerView))
 	b.WriteString(" Starting ")
 	b.WriteString(SuccessStyle.Render(projectName))
 	b.WriteString("...")
 	b.WriteString("\n\n")
 	b.WriteString(DimmedStyle.Render("This may take a moment..."))
-
 	return b.String()
 }
 
 // RenderError renders an error message
 func RenderError(err error, hint string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
+	b := renderWithHeader("")
 	b.WriteString(ErrorStyle.Render("Error: "))
 	b.WriteString(fmt.Sprintf("%v", err))
 	b.WriteString("\n\n")
-
 	if hint != "" {
 		b.WriteString(DimmedStyle.Render(hint))
 		b.WriteString("\n\n")
 	}
-
 	b.WriteString(HelpStyle.Render("Press any key to continue"))
+	return b.String()
+}
 
+// renderConfirmDialog renders a generic confirmation dialog
+// entityType: "container", "tmux session", etc.
+// labelType: "Project", "Session", etc.
+func renderConfirmDialog(operation, entityType, labelType, name string) string {
+	b := renderWithHeader("")
+	actionText := "Stop"
+	if operation == "restart" {
+		actionText = "Restart"
+	}
+	b.WriteString(ErrorStyle.Render(fmt.Sprintf("%s %s?", actionText, entityType)))
+	b.WriteString("\n\n")
+	b.WriteString(labelType + ": ")
+	b.WriteString(SuccessStyle.Render(name))
+	b.WriteString("\n\n")
+	b.WriteString(HelpStyle.Render("y: Confirm  n/Esc: Cancel"))
 	return b.String()
 }
 
 // RenderConfirmDialog renders a confirmation dialog for stop/restart operations
 func RenderConfirmDialog(operation, projectName string) string {
-	var b strings.Builder
+	return renderConfirmDialog(operation, "container", "Project", projectName)
+}
 
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
-	actionText := "Stop"
-	if operation == "restart" {
-		actionText = "Restart"
+// renderOperation renders a generic spinner operation view
+// entityType is optional and appears before the name (e.g., "session" for tmux)
+func renderOperation(operation, entityType, name, spinnerView string) string {
+	b := renderWithHeader("")
+	b.WriteString(SpinnerStyle.Render(spinnerView))
+	if entityType != "" {
+		b.WriteString(fmt.Sprintf(" %s %s ", operation, entityType))
+	} else {
+		b.WriteString(fmt.Sprintf(" %s ", operation))
 	}
-	b.WriteString(ErrorStyle.Render(fmt.Sprintf("%s container?", actionText)))
-	b.WriteString("\n\n")
-	b.WriteString("Project: ")
-	b.WriteString(SuccessStyle.Render(projectName))
-	b.WriteString("\n\n")
-	b.WriteString(HelpStyle.Render("y: Confirm  n/Esc: Cancel"))
-
+	b.WriteString(SuccessStyle.Render(name))
+	b.WriteString("...")
 	return b.String()
 }
 
 // RenderContainerOperation renders progress during stop/restart operations
 func RenderContainerOperation(operation, projectName, spinnerView string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
-	b.WriteString(SpinnerStyle.Render(spinnerView))
-	b.WriteString(fmt.Sprintf(" %s ", operation))
-	b.WriteString(SuccessStyle.Render(projectName))
-	b.WriteString("...")
-
-	return b.String()
+	return renderOperation(operation, "", projectName, spinnerView)
 }
 
 // RenderDiscovering renders the project discovery loading state
 func RenderDiscovering(spinnerView string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
+	b := renderWithHeader("")
 	b.WriteString(SpinnerStyle.Render(spinnerView))
 	b.WriteString(" Discovering projects...")
 	b.WriteString("\n\n")
 	b.WriteString(DimmedStyle.Render("Searching for devcontainer.json files..."))
-
 	return b.String()
 }
 
@@ -114,29 +112,15 @@ func truncatePath(path string, maxLen int) string {
 
 // RenderRefreshingStatus renders the loading state while refreshing container status
 func RenderRefreshingStatus(spinnerView string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
+	b := renderWithHeader("")
 	b.WriteString(SpinnerStyle.Render(spinnerView))
 	b.WriteString(" Refreshing container status...")
-
 	return b.String()
 }
 
 // RenderDashboard renders the container dashboard with status indicators
 func RenderDashboard(instances []devcontainer.ContainerInstanceWithStatus, cursor int, width int) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	subtitle := SubtitleStyle.Render("Container Dashboard")
-
-	b.WriteString(title)
-	b.WriteString("\n")
-	b.WriteString(subtitle)
-	b.WriteString("\n\n")
+	b := renderWithHeader("Container Dashboard")
 
 	if len(instances) == 0 {
 		b.WriteString(ErrorStyle.Render("No devcontainer projects found."))
@@ -199,57 +183,35 @@ func getStatusIcon(status devcontainer.ContainerStatus) string {
 
 // RenderNewWorktreeInput renders the text input for creating a new worktree
 func RenderNewWorktreeInput(projectName string, input interface{ View() string }) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n")
-	b.WriteString(SubtitleStyle.Render("New Git Worktree"))
-	b.WriteString("\n\n")
-
+	b := renderWithHeader("New Git Worktree")
 	b.WriteString("Project: ")
 	b.WriteString(SuccessStyle.Render(projectName))
 	b.WriteString("\n\n")
-
 	b.WriteString("Enter branch name (e.g., feature-auth, bugfix-123):")
 	b.WriteString("\n\n")
-
 	b.WriteString(input.View())
 	b.WriteString("\n\n")
-
 	b.WriteString(DimmedStyle.Render("Will create worktree in sibling directory with new branch"))
 	b.WriteString("\n\n")
 	b.WriteString(HelpStyle.Render("Enter: Create  Esc: Cancel"))
-
 	return b.String()
 }
 
 // RenderCreatingWorktree renders the loading state while creating a new worktree
 func RenderCreatingWorktree(branchName string, spinnerView string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
+	b := renderWithHeader("")
 	b.WriteString(SpinnerStyle.Render(spinnerView))
 	b.WriteString(" Creating worktree ")
 	b.WriteString(SuccessStyle.Render(branchName))
 	b.WriteString("...")
 	b.WriteString("\n\n")
 	b.WriteString(DimmedStyle.Render("Running git worktree add..."))
-
 	return b.String()
 }
 
 // RenderConfirmDeleteWorktree renders the confirmation dialog for deleting a worktree
 func RenderConfirmDeleteWorktree(branchName string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
+	b := renderWithHeader("")
 	b.WriteString(ErrorStyle.Render("Delete worktree?"))
 	b.WriteString("\n\n")
 	b.WriteString("Branch: ")
@@ -258,24 +220,17 @@ func RenderConfirmDeleteWorktree(branchName string) string {
 	b.WriteString(DimmedStyle.Render("This will remove the worktree directory and branch"))
 	b.WriteString("\n\n")
 	b.WriteString(HelpStyle.Render("y: Confirm  n/Esc: Cancel"))
-
 	return b.String()
 }
 
 // RenderDeletingWorktree renders the loading state while deleting a worktree
 func RenderDeletingWorktree(branchName string, spinnerView string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
+	b := renderWithHeader("")
 	b.WriteString(SpinnerStyle.Render(spinnerView))
 	b.WriteString(" Deleting worktree ")
 	b.WriteString(SuccessStyle.Render(branchName))
 	b.WriteString("...")
 	b.WriteString("\n\n")
 	b.WriteString(DimmedStyle.Render("Running git worktree remove..."))
-
 	return b.String()
 }

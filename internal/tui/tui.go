@@ -1,3 +1,5 @@
+// Package tui provides the terminal user interface for claude-quick,
+// built using the Bubbletea framework.
 package tui
 
 import (
@@ -59,6 +61,30 @@ type Model struct {
 	height           int
 	config           *config.Config
 	previousState    State
+}
+
+// getInstanceName safely returns the selected instance display name
+func (m Model) getInstanceName() string {
+	if m.selectedInstance == nil {
+		return ""
+	}
+	return m.selectedInstance.DisplayName()
+}
+
+// getSessionName safely returns the selected session name
+func (m Model) getSessionName() string {
+	if m.selectedSession == nil {
+		return ""
+	}
+	return m.selectedSession.Name
+}
+
+// getWorktreeBranch safely returns the selected worktree's branch name
+func (m Model) getWorktreeBranch() string {
+	if m.selectedInstance == nil || m.selectedInstance.Worktree == nil {
+		return ""
+	}
+	return m.selectedInstance.Worktree.Branch
 }
 
 // Messages for async operations
@@ -393,7 +419,7 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.state = StateContainerRestarting
 		return m, tea.Batch(m.spinner.Tick, m.restartContainer())
-	case "N", "esc":
+	case "n", "N", "esc":
 		m.state = StateDashboard
 		m.selectedInstance = nil
 		return m, nil
@@ -735,99 +761,47 @@ func (m Model) View() string {
 		return RenderDashboard(m.instancesStatus, m.cursor, m.width)
 
 	case StateContainerStarting:
-		instanceName := ""
-		if m.selectedInstance != nil {
-			instanceName = m.selectedInstance.DisplayName()
-		}
-		return RenderContainerStarting(instanceName, m.spinner.View())
+		return RenderContainerStarting(m.getInstanceName(), m.spinner.View())
 
 	case StateConfirmStop:
-		instanceName := ""
-		if m.selectedInstance != nil {
-			instanceName = m.selectedInstance.DisplayName()
-		}
-		return RenderConfirmDialog("stop", instanceName)
+		return RenderConfirmDialog("stop", m.getInstanceName())
 
 	case StateConfirmRestart:
-		instanceName := ""
-		if m.selectedInstance != nil {
-			instanceName = m.selectedInstance.DisplayName()
-		}
-		return RenderConfirmDialog("restart", instanceName)
+		return RenderConfirmDialog("restart", m.getInstanceName())
 
 	case StateContainerStopping:
-		instanceName := ""
-		if m.selectedInstance != nil {
-			instanceName = m.selectedInstance.DisplayName()
-		}
-		return RenderContainerOperation("Stopping", instanceName, m.spinner.View())
+		return RenderContainerOperation("Stopping", m.getInstanceName(), m.spinner.View())
 
 	case StateContainerRestarting:
-		instanceName := ""
-		if m.selectedInstance != nil {
-			instanceName = m.selectedInstance.DisplayName()
-		}
-		return RenderContainerOperation("Restarting", instanceName, m.spinner.View())
+		return RenderContainerOperation("Restarting", m.getInstanceName(), m.spinner.View())
 
 	case StateConfirmTmuxStop:
-		sessionName := ""
-		if m.selectedSession != nil {
-			sessionName = m.selectedSession.Name
-		}
-		return RenderTmuxConfirmDialog("stop", sessionName)
+		return RenderTmuxConfirmDialog("stop", m.getSessionName())
 
 	case StateConfirmTmuxRestart:
-		sessionName := ""
-		if m.selectedSession != nil {
-			sessionName = m.selectedSession.Name
-		}
-		return RenderTmuxConfirmDialog("restart", sessionName)
+		return RenderTmuxConfirmDialog("restart", m.getSessionName())
 
 	case StateTmuxStopping:
-		sessionName := ""
-		if m.selectedSession != nil {
-			sessionName = m.selectedSession.Name
-		}
-		return RenderTmuxOperation("Stopping", sessionName, m.spinner.View())
+		return RenderTmuxOperation("Stopping", m.getSessionName(), m.spinner.View())
 
 	case StateTmuxRestarting:
-		sessionName := ""
-		if m.selectedSession != nil {
-			sessionName = m.selectedSession.Name
-		}
-		return RenderTmuxOperation("Restarting", sessionName, m.spinner.View())
+		return RenderTmuxOperation("Restarting", m.getSessionName(), m.spinner.View())
 
 	case StateLoadingTmuxSessions:
-		instanceName := ""
-		if m.selectedInstance != nil {
-			instanceName = m.selectedInstance.DisplayName()
-		}
-		return RenderLoadingTmuxSessions(instanceName, m.spinner.View())
+		return RenderLoadingTmuxSessions(m.getInstanceName(), m.spinner.View())
 
 	case StateTmuxSelect:
-		instanceName := ""
-		if m.selectedInstance != nil {
-			instanceName = m.selectedInstance.DisplayName()
-		}
-		return RenderTmuxSelect(instanceName, m.tmuxSessions, m.cursor)
+		return RenderTmuxSelect(m.getInstanceName(), m.tmuxSessions, m.cursor)
 
 	case StateNewSessionInput:
-		instanceName := ""
-		if m.selectedInstance != nil {
-			instanceName = m.selectedInstance.DisplayName()
-		}
-		return RenderNewSessionInput(instanceName, m.textInput)
+		return RenderNewSessionInput(m.getInstanceName(), m.textInput)
 
 	case StateAttaching:
-		instanceName := ""
 		sessionName := m.textInput.Value()
-		if m.selectedInstance != nil {
-			instanceName = m.selectedInstance.DisplayName()
-		}
 		if m.cursor < len(m.tmuxSessions) {
 			sessionName = m.tmuxSessions[m.cursor].Name
 		}
-		return RenderAttaching(instanceName, sessionName, m.spinner.View())
+		return RenderAttaching(m.getInstanceName(), sessionName, m.spinner.View())
 
 	case StateNewWorktreeInput:
 		projectName := ""
@@ -837,22 +811,13 @@ func (m Model) View() string {
 		return RenderNewWorktreeInput(projectName, m.worktreeInput)
 
 	case StateCreatingWorktree:
-		branchName := m.worktreeInput.Value()
-		return RenderCreatingWorktree(branchName, m.spinner.View())
+		return RenderCreatingWorktree(m.worktreeInput.Value(), m.spinner.View())
 
 	case StateConfirmDeleteWorktree:
-		branchName := ""
-		if m.selectedInstance != nil && m.selectedInstance.Worktree != nil {
-			branchName = m.selectedInstance.Worktree.Branch
-		}
-		return RenderConfirmDeleteWorktree(branchName)
+		return RenderConfirmDeleteWorktree(m.getWorktreeBranch())
 
 	case StateDeletingWorktree:
-		branchName := ""
-		if m.selectedInstance != nil && m.selectedInstance.Worktree != nil {
-			branchName = m.selectedInstance.Worktree.Branch
-		}
-		return RenderDeletingWorktree(branchName, m.spinner.View())
+		return RenderDeletingWorktree(m.getWorktreeBranch(), m.spinner.View())
 
 	case StateError:
 		return RenderError(m.err, m.errHint)

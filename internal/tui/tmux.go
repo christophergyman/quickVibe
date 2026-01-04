@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/christophergyman/claude-quick/internal/tmux"
 )
@@ -11,15 +9,7 @@ const newSessionOption = "[+ New Session]"
 
 // RenderTmuxSelect renders the tmux session selection view
 func RenderTmuxSelect(projectName string, sessions []tmux.Session, cursor int) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	subtitle := SubtitleStyle.Render("tmux Sessions in: " + projectName)
-
-	b.WriteString(title)
-	b.WriteString("\n")
-	b.WriteString(subtitle)
-	b.WriteString("\n\n")
+	b := renderWithHeader("tmux Sessions in: " + projectName)
 
 	// Render sessions
 	for i, session := range sessions {
@@ -55,57 +45,31 @@ func RenderTmuxSelect(projectName string, sessions []tmux.Session, cursor int) s
 
 // RenderNewSessionInput renders the text input view for new session name
 func RenderNewSessionInput(projectName string, ti textinput.Model) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	subtitle := SubtitleStyle.Render("New Session in: " + projectName)
-
-	b.WriteString(title)
-	b.WriteString("\n")
-	b.WriteString(subtitle)
-	b.WriteString("\n\n")
-
+	b := renderWithHeader("New Session in: " + projectName)
 	b.WriteString("Enter session name:\n\n")
 	b.WriteString(ti.View())
 	b.WriteString("\n\n")
 	b.WriteString(HelpStyle.Render("Enter: Create  Esc: Cancel"))
 	b.WriteString("\n")
 	b.WriteString(HelpStyle.Render("Tip: Detach from tmux with Ctrl+b d to return to dashboard"))
-
 	return b.String()
 }
 
 // RenderAttaching renders the view while attaching to a tmux session
 func RenderAttaching(projectName, sessionName, spinnerView string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
+	b := renderWithHeader("")
 	b.WriteString(SpinnerStyle.Render(spinnerView))
 	b.WriteString(" Attaching to ")
 	b.WriteString(SuccessStyle.Render(sessionName))
 	b.WriteString("...")
-
 	return b.String()
 }
 
 // RenderLoadingTmuxSessions renders the loading state while fetching tmux sessions
 func RenderLoadingTmuxSessions(projectName, spinnerView string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	subtitle := SubtitleStyle.Render("Project: " + projectName)
-
-	b.WriteString(title)
-	b.WriteString("\n")
-	b.WriteString(subtitle)
-	b.WriteString("\n\n")
-
+	b := renderWithHeader("Project: " + projectName)
 	b.WriteString(SpinnerStyle.Render(spinnerView))
 	b.WriteString(" Loading tmux sessions...")
-
 	return b.String()
 }
 
@@ -121,38 +85,10 @@ func IsNewSessionSelected(sessions []tmux.Session, cursor int) bool {
 
 // RenderTmuxConfirmDialog renders a confirmation dialog for tmux stop/restart operations
 func RenderTmuxConfirmDialog(operation, sessionName string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
-	actionText := "Stop"
-	if operation == "restart" {
-		actionText = "Restart"
-	}
-	b.WriteString(ErrorStyle.Render(actionText + " tmux session?"))
-	b.WriteString("\n\n")
-	b.WriteString("Session: ")
-	b.WriteString(SuccessStyle.Render(sessionName))
-	b.WriteString("\n\n")
-	b.WriteString(HelpStyle.Render("y: Confirm  n/Esc: Cancel"))
-
-	return b.String()
+	return renderConfirmDialog(operation, "tmux session", "Session", sessionName)
 }
 
 // RenderTmuxOperation renders progress during tmux stop/restart operations
 func RenderTmuxOperation(operation, sessionName, spinnerView string) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
-	b.WriteString(SpinnerStyle.Render(spinnerView))
-	b.WriteString(" " + operation + " session ")
-	b.WriteString(SuccessStyle.Render(sessionName))
-	b.WriteString("...")
-
-	return b.String()
+	return renderOperation(operation, "session", sessionName, spinnerView)
 }

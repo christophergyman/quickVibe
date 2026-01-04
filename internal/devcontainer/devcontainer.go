@@ -1,3 +1,5 @@
+// Package devcontainer provides functionality for managing devcontainers,
+// git worktrees, and tmux sessions within devcontainers.
 package devcontainer
 
 import (
@@ -27,6 +29,29 @@ type WorktreeInfo struct {
 	IsMain   bool   // True if this is the main worktree
 }
 
+// newMainWorktreeInfo creates a WorktreeInfo for the main worktree of a repo
+func newMainWorktreeInfo(path, branch string) WorktreeInfo {
+	return WorktreeInfo{
+		Path:     path,
+		Branch:   branch,
+		MainRepo: path,
+		GitDir:   filepath.Join(path, ".git"),
+		IsMain:   true,
+	}
+}
+
+// newBranchWorktreeInfo creates a WorktreeInfo for a non-main worktree
+func newBranchWorktreeInfo(path, branch, mainRepo string) WorktreeInfo {
+	worktreeName := filepath.Base(path)
+	return WorktreeInfo{
+		Path:     path,
+		Branch:   branch,
+		MainRepo: mainRepo,
+		GitDir:   filepath.Join(mainRepo, ".git", "worktrees", worktreeName),
+		IsMain:   false,
+	}
+}
+
 // ContainerStatus represents the runtime status of a devcontainer
 type ContainerStatus string
 
@@ -35,14 +60,6 @@ const (
 	StatusStopped ContainerStatus = "stopped"
 	StatusUnknown ContainerStatus = "unknown"
 )
-
-// ProjectWithStatus combines project discovery with runtime status
-type ProjectWithStatus struct {
-	Project
-	Status       ContainerStatus
-	ContainerID  string
-	SessionCount int
-}
 
 // ContainerInstance represents a specific devcontainer instance
 // Each instance corresponds to a main repo or a git worktree
@@ -68,11 +85,14 @@ func (c ContainerInstance) DisplayName() string {
 	return c.Name
 }
 
-// Discover finds all devcontainer projects in the given search paths
-func Discover(searchPaths []string, maxDepth int, excludedDirs []string) []Project {
-	var projects []Project
-	seen := make(map[string]bool)
+// devcontainerFoundFunc is a callback invoked when a devcontainer.json is found
+// configPath is the full path to devcontainer.json
+// projectPath is the root directory of the project
+type devcontainerFoundFunc func(configPath, projectPath string)
 
+// walkDevcontainerDirs walks through search paths looking for devcontainer.json files
+// and invokes the callback for each one found
+func walkDevcontainerDirs(searchPaths []string, maxDepth int, excludedDirs []string, onFound devcontainerFoundFunc) {
 	// Build exclusion set for O(1) lookup
 	excludeSet := make(map[string]bool, len(excludedDirs))
 	for _, dir := range excludedDirs {
@@ -104,32 +124,18 @@ func Discover(searchPaths []string, maxDepth int, excludedDirs []string) []Proje
 
 			// Look for devcontainer.json
 			if d.Name() == "devcontainer.json" {
-				var projectPath string
-
-				// Determine the project root
 				dir := filepath.Dir(path)
-				if filepath.Base(dir) == ".devcontainer" {
-					// .devcontainer/devcontainer.json
-					projectPath = filepath.Dir(dir)
-				} else {
-					// devcontainer.json at project root
-					projectPath = dir
-				}
 
-				if !seen[projectPath] {
-					seen[projectPath] = true
-					projects = append(projects, Project{
-						Name: filepath.Base(projectPath),
-						Path: projectPath,
-					})
+				// Only accept .devcontainer/devcontainer.json pattern
+				if filepath.Base(dir) == ".devcontainer" {
+					projectPath := filepath.Dir(dir)
+					onFound(path, projectPath)
 				}
 			}
 
 			return nil
 		})
 	}
-
-	return projects
 }
 
 // IsGitWorktree checks if the given path is a git worktree and returns its info
@@ -143,15 +149,9 @@ func IsGitWorktree(path string) *WorktreeInfo {
 
 	if info.IsDir() {
 		// It's a regular git repository (main worktree)
-		// Get the current branch
 		branch := getGitBranch(path)
-		return &WorktreeInfo{
-			Path:     path,
-			Branch:   branch,
-			MainRepo: path,
-			GitDir:   gitPath,
-			IsMain:   true,
-		}
+		wt := newMainWorktreeInfo(path, branch)
+		return &wt
 	}
 
 	// .git is a file - this is a worktree
@@ -207,24 +207,24 @@ func ListWorktrees(repoPath string) ([]WorktreeInfo, error) {
 	var current WorktreeInfo
 	isFirst := true
 
+	// Helper to finalize and append the current worktree
+	appendWorktree := func() {
+		if current.Path == "" {
+			return
+		}
+		if isFirst {
+			worktrees = append(worktrees, newMainWorktreeInfo(current.Path, current.Branch))
+		} else {
+			worktrees = append(worktrees, newBranchWorktreeInfo(current.Path, current.Branch, repoPath))
+		}
+		isFirst = false
+	}
+
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
-			if current.Path != "" {
-				current.IsMain = isFirst
-				if current.IsMain {
-					current.MainRepo = current.Path
-					current.GitDir = filepath.Join(current.Path, ".git")
-				} else {
-					current.MainRepo = repoPath
-					// GitDir for non-main worktrees
-					worktreeName := filepath.Base(current.Path)
-					current.GitDir = filepath.Join(repoPath, ".git", "worktrees", worktreeName)
-				}
-				worktrees = append(worktrees, current)
-				isFirst = false
-			}
+			appendWorktree()
 			current = WorktreeInfo{}
 			continue
 		}
@@ -247,18 +247,7 @@ func ListWorktrees(repoPath string) ([]WorktreeInfo, error) {
 	}
 
 	// Handle last worktree if no trailing newline
-	if current.Path != "" {
-		current.IsMain = isFirst
-		if current.IsMain {
-			current.MainRepo = current.Path
-			current.GitDir = filepath.Join(current.Path, ".git")
-		} else {
-			current.MainRepo = repoPath
-			worktreeName := filepath.Base(current.Path)
-			current.GitDir = filepath.Join(repoPath, ".git", "worktrees", worktreeName)
-		}
-		worktrees = append(worktrees, current)
-	}
+	appendWorktree()
 
 	return worktrees, nil
 }
@@ -280,120 +269,76 @@ func DiscoverInstances(searchPaths []string, maxDepth int, excludedDirs []string
 	seenProjects := make(map[string]bool)  // Track main repos we've processed
 	seenWorktrees := make(map[string]bool) // Track worktree paths to deduplicate
 
-	// Build exclusion set for O(1) lookup
-	excludeSet := make(map[string]bool, len(excludedDirs))
-	for _, dir := range excludedDirs {
-		excludeSet[dir] = true
-	}
-
-	for _, searchPath := range searchPaths {
-		filepath.WalkDir(searchPath, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil // Skip directories we can't read
+	walkDevcontainerDirs(searchPaths, maxDepth, excludedDirs, func(configPath, projectPath string) {
+		// Check if this is a git repo/worktree
+		wtInfo := IsGitWorktree(projectPath)
+		if wtInfo == nil {
+			// Not a git repo - just add as a single instance without worktree info
+			if !seenWorktrees[projectPath] {
+				seenWorktrees[projectPath] = true
+				instances = append(instances, ContainerInstance{
+					Project: Project{
+						Name: filepath.Base(projectPath),
+						Path: projectPath,
+					},
+					ConfigPath: configPath,
+					Worktree:   nil,
+				})
 			}
+			return
+		}
 
-			// Skip hidden directories (except .devcontainer)
-			if d.IsDir() && strings.HasPrefix(d.Name(), ".") && d.Name() != ".devcontainer" {
-				return fs.SkipDir
+		// Get the main repo path
+		mainRepo := wtInfo.MainRepo
+		if seenProjects[mainRepo] {
+			return // Already processed this project and its worktrees
+		}
+		seenProjects[mainRepo] = true
+
+		// Find devcontainer.json in main repo (for worktrees to share)
+		mainConfigPath := filepath.Join(mainRepo, ".devcontainer", "devcontainer.json")
+		if _, err := os.Stat(mainConfigPath); err != nil {
+			// Fall back to discovered config path
+			mainConfigPath = configPath
+		}
+
+		// List all worktrees for this repository
+		worktrees, err := ListWorktrees(mainRepo)
+		if err != nil {
+			// If we can't list worktrees, just add the discovered path
+			if !seenWorktrees[projectPath] {
+				seenWorktrees[projectPath] = true
+				instances = append(instances, ContainerInstance{
+					Project: Project{
+						Name: filepath.Base(projectPath),
+						Path: projectPath,
+					},
+					ConfigPath: mainConfigPath,
+					Worktree:   wtInfo,
+				})
 			}
+			return
+		}
 
-			// Skip excluded directories
-			if d.IsDir() && excludeSet[d.Name()] {
-				return fs.SkipDir
+		// Add each worktree as a separate instance
+		for _, wt := range worktrees {
+			if seenWorktrees[wt.Path] {
+				continue
 			}
+			seenWorktrees[wt.Path] = true
 
-			// Check depth
-			relPath, _ := filepath.Rel(searchPath, path)
-			depth := strings.Count(relPath, string(os.PathSeparator))
-			if depth > maxDepth {
-				return fs.SkipDir
-			}
-
-			// Look for devcontainer.json (only in .devcontainer/ folder, not named configs)
-			if d.Name() == "devcontainer.json" {
-				dir := filepath.Dir(path)
-
-				// Only accept .devcontainer/devcontainer.json pattern
-				if filepath.Base(dir) != ".devcontainer" {
-					return nil
-				}
-
-				projectPath := filepath.Dir(dir)
-				configPath := path
-
-				// Check if this is a git repo/worktree
-				wtInfo := IsGitWorktree(projectPath)
-				if wtInfo == nil {
-					// Not a git repo - just add as a single instance without worktree info
-					if !seenWorktrees[projectPath] {
-						seenWorktrees[projectPath] = true
-						instances = append(instances, ContainerInstance{
-							Project: Project{
-								Name: filepath.Base(projectPath),
-								Path: projectPath,
-							},
-							ConfigPath: configPath,
-							Worktree:   nil,
-						})
-					}
-					return nil
-				}
-
-				// Get the main repo path
-				mainRepo := wtInfo.MainRepo
-				if seenProjects[mainRepo] {
-					return nil // Already processed this project and its worktrees
-				}
-				seenProjects[mainRepo] = true
-
-				// Find devcontainer.json in main repo (for worktrees to share)
-				mainConfigPath := filepath.Join(mainRepo, ".devcontainer", "devcontainer.json")
-				if _, err := os.Stat(mainConfigPath); err != nil {
-					// Fall back to discovered config path
-					mainConfigPath = configPath
-				}
-
-				// List all worktrees for this repository
-				worktrees, err := ListWorktrees(mainRepo)
-				if err != nil {
-					// If we can't list worktrees, just add the discovered path
-					if !seenWorktrees[projectPath] {
-						seenWorktrees[projectPath] = true
-						instances = append(instances, ContainerInstance{
-							Project: Project{
-								Name: filepath.Base(projectPath),
-								Path: projectPath,
-							},
-							ConfigPath: mainConfigPath,
-							Worktree:   wtInfo,
-						})
-					}
-					return nil
-				}
-
-				// Add each worktree as a separate instance
-				for _, wt := range worktrees {
-					if seenWorktrees[wt.Path] {
-						continue
-					}
-					seenWorktrees[wt.Path] = true
-
-					// Copy worktree info
-					wtCopy := wt
-					instances = append(instances, ContainerInstance{
-						Project: Project{
-							Name: filepath.Base(mainRepo), // Use main repo name for all
-							Path: wt.Path,
-						},
-						ConfigPath: mainConfigPath,
-						Worktree:   &wtCopy,
-					})
-				}
-			}
-
-			return nil
-		})
-	}
+			// Copy worktree info
+			wtCopy := wt
+			instances = append(instances, ContainerInstance{
+				Project: Project{
+					Name: filepath.Base(mainRepo), // Use main repo name for all
+					Path: wt.Path,
+				},
+				ConfigPath: mainConfigPath,
+				Worktree:   &wtCopy,
+			})
+		}
+	})
 
 	return instances
 }
@@ -431,20 +376,32 @@ func Up(projectPath string) error {
 	return nil
 }
 
+// findContainerByPath finds a Docker container by its devcontainer.local_folder label
+// If runningOnly is true, only searches running containers
+// If runningOnly is false, searches all containers (including stopped)
+func findContainerByPath(projectPath string, runningOnly bool) (string, error) {
+	args := []string{"ps", "-q", "--filter", fmt.Sprintf("label=devcontainer.local_folder=%s", projectPath)}
+	if !runningOnly {
+		// Insert "-a" after "ps" to include stopped containers
+		args = []string{"ps", "-a", "-q", "--filter", fmt.Sprintf("label=devcontainer.local_folder=%s", projectPath)}
+	}
+	cmd := exec.Command("docker", args...)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to find container: %v", err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 // Stop stops the devcontainer by finding and stopping its Docker container
 func Stop(projectPath string) error {
-	// Find container by devcontainer label
-	findCmd := exec.Command("docker", "ps", "-q",
-		"--filter", fmt.Sprintf("label=devcontainer.local_folder=%s", projectPath))
-	output, err := findCmd.Output()
+	containerID, err := findContainerByPath(projectPath, true)
 	if err != nil {
-		return fmt.Errorf("failed to find container: %v", err)
+		return err
 	}
-	containerID := strings.TrimSpace(string(output))
 	if containerID == "" {
 		return fmt.Errorf("no running container found for project")
 	}
-	// Stop the container
 	stopCmd := exec.Command("docker", "stop", containerID)
 	var stderr bytes.Buffer
 	stopCmd.Stderr = &stderr
@@ -456,13 +413,10 @@ func Stop(projectPath string) error {
 
 // Restart restarts the devcontainer
 func Restart(projectPath string) error {
-	findCmd := exec.Command("docker", "ps", "-a", "-q",
-		"--filter", fmt.Sprintf("label=devcontainer.local_folder=%s", projectPath))
-	output, err := findCmd.Output()
+	containerID, err := findContainerByPath(projectPath, false)
 	if err != nil {
-		return fmt.Errorf("failed to find container: %v", err)
+		return err
 	}
-	containerID := strings.TrimSpace(string(output))
 	if containerID == "" {
 		return Up(projectPath) // No container, just start
 	}
@@ -478,23 +432,19 @@ func Restart(projectPath string) error {
 // GetContainerStatus checks if a container is running for the given project path
 func GetContainerStatus(projectPath string) (ContainerStatus, string) {
 	// Check running containers first
-	findCmd := exec.Command("docker", "ps", "-q",
-		"--filter", fmt.Sprintf("label=devcontainer.local_folder=%s", projectPath))
-	output, err := findCmd.Output()
+	containerID, err := findContainerByPath(projectPath, true)
 	if err != nil {
 		return StatusUnknown, ""
 	}
-
-	containerID := strings.TrimSpace(string(output))
 	if containerID != "" {
 		return StatusRunning, containerID
 	}
 
 	// Check stopped containers
-	findCmd = exec.Command("docker", "ps", "-a", "-q",
+	cmd := exec.Command("docker", "ps", "-a", "-q",
 		"--filter", fmt.Sprintf("label=devcontainer.local_folder=%s", projectPath),
 		"--filter", "status=exited")
-	output, err = findCmd.Output()
+	output, err := cmd.Output()
 	if err != nil {
 		return StatusUnknown, ""
 	}
@@ -505,40 +455,6 @@ func GetContainerStatus(projectPath string) (ContainerStatus, string) {
 	}
 
 	return StatusUnknown, ""
-}
-
-// GetAllProjectsStatus returns all projects with their current Docker status
-func GetAllProjectsStatus(projects []Project) []ProjectWithStatus {
-	result := make([]ProjectWithStatus, len(projects))
-	var wg sync.WaitGroup
-
-	for i, p := range projects {
-		wg.Add(1)
-		go func(idx int, proj Project) {
-			defer wg.Done()
-
-			status, containerID := GetContainerStatus(proj.Path)
-			sessionCount := 0
-
-			// Only count sessions if container is running
-			if status == StatusRunning {
-				sessions, err := ListTmuxSessions(proj.Path)
-				if err == nil {
-					sessionCount = len(sessions)
-				}
-			}
-
-			result[idx] = ProjectWithStatus{
-				Project:      proj,
-				Status:       status,
-				ContainerID:  containerID,
-				SessionCount: sessionCount,
-			}
-		}(i, p)
-	}
-
-	wg.Wait()
-	return result
 }
 
 // GetAllInstancesStatus returns all instances with their current Docker status
@@ -591,20 +507,35 @@ func ExecInteractive(projectPath string, args []string) error {
 	return syscall.Exec(devcontainerPath, cmdArgs, os.Environ())
 }
 
-// ListTmuxSessions lists tmux sessions inside the container
-func ListTmuxSessions(projectPath string) ([]string, error) {
-	cmd := exec.Command("devcontainer", "exec", "--workspace-folder", projectPath,
-		"tmux", "list-sessions", "-F", "#{session_name}:#{session_attached}")
+// execInContainer runs a command inside the devcontainer and returns its output
+func execInContainer(projectPath string, args ...string) ([]byte, error) {
+	cmdArgs := append([]string{"exec", "--workspace-folder", projectPath}, args...)
+	cmd := exec.Command("devcontainer", cmdArgs...)
+	return cmd.Output()
+}
 
-	output, err := cmd.Output()
+// execInContainerWithStderr runs a command inside the devcontainer and captures stderr for errors
+func execInContainerWithStderr(projectPath string, errPrefix string, args ...string) error {
+	cmdArgs := append([]string{"exec", "--workspace-folder", projectPath}, args...)
+	cmd := exec.Command("devcontainer", cmdArgs...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s: %s", errPrefix, stderr.String())
+	}
+	return nil
+}
+
+// ListTmuxSessions lists tmux sessions inside the container
+// Returns empty slice (not nil) if no sessions exist
+func ListTmuxSessions(projectPath string) ([]string, error) {
+	output, err := execInContainer(projectPath, "tmux", "list-sessions", "-F", "#{session_name}:#{session_attached}")
 	if err != nil {
-		// No sessions is not an error
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			if exitErr.ExitCode() == 1 {
-				return nil, nil
-			}
+		// Exit code 1 means no sessions - return empty slice, not error
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return []string{}, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("ListTmuxSessions: %w", err)
 	}
 
 	var sessions []string
@@ -618,37 +549,20 @@ func ListTmuxSessions(projectPath string) ([]string, error) {
 
 // CreateTmuxSession creates a new tmux session in the container
 func CreateTmuxSession(projectPath, sessionName string) error {
-	cmd := exec.Command("devcontainer", "exec", "--workspace-folder", projectPath,
+	return execInContainerWithStderr(projectPath, "failed to create tmux session",
 		"tmux", "new-session", "-d", "-s", sessionName)
-
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to create tmux session: %s", stderr.String())
-	}
-	return nil
 }
 
 // HasTmux checks if tmux is available in the container
 func HasTmux(projectPath string) bool {
-	cmd := exec.Command("devcontainer", "exec", "--workspace-folder", projectPath,
-		"which", "tmux")
-	return cmd.Run() == nil
+	_, err := execInContainer(projectPath, "which", "tmux")
+	return err == nil
 }
 
 // KillTmuxSession kills a tmux session in the container
 func KillTmuxSession(projectPath, sessionName string) error {
-	cmd := exec.Command("devcontainer", "exec", "--workspace-folder", projectPath,
+	return execInContainerWithStderr(projectPath, "failed to kill tmux session",
 		"tmux", "kill-session", "-t", sessionName)
-
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to kill tmux session: %s", stderr.String())
-	}
-	return nil
 }
 
 // CreateWorktree creates a new git worktree with a new branch

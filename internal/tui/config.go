@@ -2,22 +2,13 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/christophergyman/claude-quick/internal/config"
 )
 
 // RenderConfigDisplay renders the configuration view
 func RenderConfigDisplay(cfg *config.Config) string {
-	var b strings.Builder
-
-	title := TitleStyle.Render("claude-quick")
-	subtitle := SubtitleStyle.Render("Configuration")
-
-	b.WriteString(title)
-	b.WriteString("\n")
-	b.WriteString(subtitle)
-	b.WriteString("\n\n")
+	b := renderWithHeader("Configuration")
 
 	// Config file location
 	b.WriteString(DimmedStyle.Render("Config file: "))

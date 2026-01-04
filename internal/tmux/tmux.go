@@ -1,3 +1,4 @@
+// Package tmux provides utilities for parsing and formatting tmux session information.
 package tmux
 
 import (
