@@ -17,7 +17,7 @@ User → TUI (Bubble Tea) → devcontainer CLI → Docker → tmux sessions
 claude-quick/
 ├── main.go                    # Entry point: loads config, validates CLI, launches TUI
 ├── internal/
-│   ├── config/config.go       # YAML config loading from ~/.config/claude-quick/config.yaml
+│   ├── config/config.go       # YAML config loading (executable dir or ~/.config/claude-quick/)
 │   ├── constants/constants.go # Default values, timeouts, display limits
 │   ├── auth/                  # Credential management
 │   │   ├── types.go           # Credential, SourceType (file/env/command)
@@ -116,7 +116,9 @@ Parallel goroutines query Docker status for all instances simultaneously.
 
 ## Configuration
 
-Location: `~/.config/claude-quick/config.yaml`
+Location (in priority order):
+1. `claude-quick.yaml` next to executable (following symlinks)
+2. `~/.config/claude-quick/config.yaml` (legacy, deprecated)
 
 ```yaml
 search_paths:

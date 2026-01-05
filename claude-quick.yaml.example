@@ -1,5 +1,7 @@
 # Claude Quick Configuration
-# Copy this file to ~/.config/claude-quick/config.yaml
+# This file should be placed next to the claude-quick executable as 'claude-quick.yaml'.
+# For build.sh installs: place in the repo root directory.
+# Legacy location (~/.config/claude-quick/config.yaml) is still supported but deprecated.
 
 # Directories to scan for devcontainer projects
 # Supports ~ for home directory expansion

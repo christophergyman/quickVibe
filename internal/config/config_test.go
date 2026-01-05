@@ -211,14 +211,105 @@ func TestConfigPath(t *testing.T) {
 		t.Error("ConfigPath() returned empty string")
 	}
 
-	// Should contain config filename
-	if filepath.Base(path) != "config.yaml" {
-		t.Errorf("ConfigPath() = %q, should end with config.yaml", path)
+	// Should end with either claude-quick.yaml (new) or config.yaml (legacy)
+	base := filepath.Base(path)
+	if base != "claude-quick.yaml" && base != "config.yaml" {
+		t.Errorf("ConfigPath() = %q, should end with claude-quick.yaml or config.yaml", path)
+	}
+
+	// Should be an absolute path
+	if !filepath.IsAbs(path) {
+		t.Logf("ConfigPath() returned relative path: %s", path)
+	}
+}
+
+func TestExecutableDir(t *testing.T) {
+	dir, err := executableDir()
+	if err != nil {
+		t.Logf("executableDir() returned error (may be expected in test env): %v", err)
+		return
+	}
+
+	if dir == "" {
+		t.Error("executableDir() returned empty string")
+	}
+
+	// Should be an absolute path
+	if !filepath.IsAbs(dir) {
+		t.Errorf("executableDir() returned non-absolute path: %s", dir)
+	}
+
+	// Should be a valid directory
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Errorf("executableDir() returned invalid path: %v", err)
+	} else if !info.IsDir() {
+		t.Errorf("executableDir() returned non-directory: %s", dir)
+	}
+}
+
+func TestLegacyConfigPath(t *testing.T) {
+	path := legacyConfigPath()
+
+	if path == "" {
+		t.Error("legacyConfigPath() returned empty string")
 	}
 
 	// Should contain claude-quick directory
 	if !filepath.IsAbs(path) {
-		// Allow relative paths in some environments
-		t.Logf("ConfigPath() returned relative path: %s", path)
+		t.Logf("legacyConfigPath() returned relative path: %s", path)
 	}
+
+	// Should end with config.yaml
+	if filepath.Base(path) != "config.yaml" {
+		t.Errorf("legacyConfigPath() = %q, should end with config.yaml", path)
+	}
+
+	// Should contain claude-quick in the path
+	dir := filepath.Dir(path)
+	if filepath.Base(dir) != "claude-quick" {
+		t.Errorf("legacyConfigPath() parent dir = %q, should be claude-quick", filepath.Base(dir))
+	}
+}
+
+func TestConfigPath_Priority(t *testing.T) {
+	path, source := configPath()
+
+	// Path should never be empty
+	if path == "" {
+		t.Error("configPath() returned empty path")
+	}
+
+	// Source should be a valid value
+	switch source {
+	case ConfigSourceExecutable, ConfigSourceLegacy, ConfigSourceDefault:
+		// OK
+	default:
+		t.Errorf("configPath() returned invalid source: %d", source)
+	}
+
+	t.Logf("configPath() resolved to %q (source: %d)", path, source)
+}
+
+func TestGetConfigSource(t *testing.T) {
+	// After Load() is called, GetConfigSource should return a valid source
+	_, err := Load()
+	if err != nil {
+		t.Logf("Load() returned error (may be expected): %v", err)
+	}
+
+	source := GetConfigSource()
+	switch source {
+	case ConfigSourceExecutable, ConfigSourceLegacy, ConfigSourceDefault:
+		// OK
+	default:
+		t.Errorf("GetConfigSource() returned invalid source: %d", source)
+	}
+}
+
+func TestIsUsingLegacyConfig(t *testing.T) {
+	// Test documents expected behavior
+	// Actual value depends on whether legacy config exists
+	isLegacy := IsUsingLegacyConfig()
+	t.Logf("IsUsingLegacyConfig() = %v", isLegacy)
 }
