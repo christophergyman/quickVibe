@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/christophergyman/claude-quick/internal/config"
 	"github.com/christophergyman/claude-quick/internal/constants"
 	"github.com/christophergyman/claude-quick/internal/devcontainer"
 )
@@ -138,7 +139,7 @@ func RenderDashboard(instances []devcontainer.ContainerInstanceWithStatus, curso
 		b.WriteString("\n\n")
 		b.WriteString(DimmedStyle.Render("Add search paths to: "))
 		b.WriteString("\n")
-		b.WriteString(DimmedStyle.Render("~/.config/claude-quick/config.yaml"))
+		b.WriteString(DimmedStyle.Render(config.ConfigPath()))
 		return b.String()
 	}
 
