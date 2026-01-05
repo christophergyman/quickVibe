@@ -17,7 +17,7 @@ User → TUI (Bubble Tea) → devcontainer CLI → Docker → tmux sessions
 claude-quick/
 ├── main.go                    # Entry point: loads config, validates CLI, launches TUI
 ├── internal/
-│   ├── config/config.go       # YAML config loading from ~/.config/claude-quick/config.yaml
+│   ├── config/config.go       # YAML config loading (executable dir or ~/.config/claude-quick/)
 │   ├── constants/constants.go # Default values, timeouts, display limits
 │   ├── auth/                  # Credential management
 │   │   ├── types.go           # Credential, SourceType (file/env/command)
@@ -116,7 +116,9 @@ Parallel goroutines query Docker status for all instances simultaneously.
 
 ## Configuration
 
-Location: `~/.config/claude-quick/config.yaml`
+Location (in priority order):
+1. `claude-quick.yaml` next to executable (following symlinks)
+2. `~/.config/claude-quick/config.yaml` (legacy, deprecated)
 
 ```yaml
 search_paths:
@@ -198,7 +200,7 @@ go build -o claude-quick .
 
 **Credential escaping**: `auth/file.go` (write) and `devcontainer/tmux_ops.go` (read) must stay in sync. Single quotes use `'val'"'"'ue'` pattern.
 
-**Duplicate expandPath()**: Exists in both `config/config.go:113` and `auth/resolver.go:115`. Changes must update both.
+**Path expansion**: The `util.ExpandPath()` function in `internal/util/path.go` handles `~` expansion. Used by both config and auth packages.
 
 ## State Machine Rules
 
@@ -249,9 +251,19 @@ go func(idx int, instance ContainerInstance) {
 
 This pattern avoids the classic Go loop variable capture bug. Always pass loop variables as function parameters when spawning goroutines.
 
-## Testing Note
+## Testing
 
-No automated tests exist (`*_test.go` files). When making changes:
-- Build with `go build` to catch compile errors
-- Manually test affected flows (discovery, container start/stop, worktree create/delete, tmux attach)
-- Pay extra attention when refactoring core logic
+Run tests with:
+```bash
+go test ./...
+```
+
+Test coverage exists for:
+- `internal/auth` - Credential resolution, file operations, quote escaping
+- `internal/config` - Configuration loading, validation, defaults
+- `internal/constants` - Constant values
+- `internal/devcontainer` - Discovery, git worktrees, depth limits
+- `internal/tui` - Helpers, styles, rendering functions, model accessors
+- `internal/util` - Path expansion
+
+The build script (`./build.sh`) runs tests automatically before building.

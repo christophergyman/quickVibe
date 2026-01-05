@@ -233,11 +233,15 @@ func (m Model) createWorktree(branchName string) tea.Cmd {
 		if m.selectedInstance == nil {
 			return containerErrorMsg{err: errNoInstanceSelected}
 		}
-		worktreePath, err := devcontainer.CreateWorktree(m.selectedInstance.Path, branchName)
+		worktreePath, pushWarning, err := devcontainer.CreateWorktree(
+			m.selectedInstance.Path,
+			branchName,
+			m.config.IsAutoPushWorktree(),
+		)
 		if err != nil {
 			return containerErrorMsg{err: err}
 		}
-		return worktreeCreatedMsg{worktreePath: worktreePath}
+		return worktreeCreatedMsg{worktreePath: worktreePath, pushWarning: pushWarning}
 	}
 }
 
@@ -304,7 +308,11 @@ func (m Model) createWorktreeFromIssue() tea.Cmd {
 		}
 
 		// Create worktree
-		worktreePath, err := devcontainer.CreateWorktree(m.selectedInstance.Path, branchName)
+		worktreePath, pushWarning, err := devcontainer.CreateWorktree(
+			m.selectedInstance.Path,
+			branchName,
+			m.config.IsAutoPushWorktree(),
+		)
 		if err != nil {
 			return containerErrorMsg{err: err}
 		}
@@ -312,6 +320,7 @@ func (m Model) createWorktreeFromIssue() tea.Cmd {
 		return githubWorktreeCreatedMsg{
 			worktreePath: worktreePath,
 			branchName:   branchName,
+			pushWarning:  pushWarning,
 		}
 	}
 }

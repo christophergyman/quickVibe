@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/christophergyman/claude-quick/internal/config"
 	"github.com/christophergyman/claude-quick/internal/constants"
 	"github.com/christophergyman/claude-quick/internal/devcontainer"
 )
@@ -116,7 +117,7 @@ func RenderRefreshingStatus(spinnerView string) string {
 }
 
 // RenderDashboard renders the container dashboard with status indicators
-func RenderDashboard(instances []devcontainer.ContainerInstanceWithStatus, cursor int, width int) string {
+func RenderDashboard(instances []devcontainer.ContainerInstanceWithStatus, cursor int, width int, warning string) string {
 	if width <= 0 {
 		width = defaultWidth
 	}
@@ -127,12 +128,18 @@ func RenderDashboard(instances []devcontainer.ContainerInstanceWithStatus, curso
 	b.WriteString(RenderBorderedHeader("claude-quick", "Container Dashboard", width))
 	b.WriteString("\n\n")
 
+	// Show warning if present
+	if warning != "" {
+		b.WriteString(WarningStyle.Render("Warning: " + warning))
+		b.WriteString("\n\n")
+	}
+
 	if len(instances) == 0 {
 		b.WriteString(ErrorStyle.Render("No devcontainer projects found."))
 		b.WriteString("\n\n")
 		b.WriteString(DimmedStyle.Render("Add search paths to: "))
 		b.WriteString("\n")
-		b.WriteString(DimmedStyle.Render("~/.config/claude-quick/config.yaml"))
+		b.WriteString(DimmedStyle.Render(config.ConfigPath()))
 		return b.String()
 	}
 

@@ -51,6 +51,7 @@ type tmuxDetachedMsg struct{}
 // worktreeCreatedMsg is sent when a new git worktree is created
 type worktreeCreatedMsg struct {
 	worktreePath string
+	pushWarning  string
 }
 
 // worktreeDeletedMsg is sent when a git worktree is deleted
@@ -77,6 +78,7 @@ type githubIssueDetailLoadedMsg struct {
 type githubWorktreeCreatedMsg struct {
 	worktreePath string
 	branchName   string
+	pushWarning  string
 }
 
 // tmuxNotFoundError indicates tmux is not available in the container

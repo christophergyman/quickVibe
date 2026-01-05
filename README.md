@@ -38,10 +38,19 @@ cd claude-quick
 go build -o claude-quick .
 ```
 
-**Build Script** (builds + symlinks to ~/.local/bin)
+**Build Script** (runs tests, builds, symlinks to ~/.local/bin)
 ```bash
 ./build.sh
 ```
+
+## Testing
+
+Run the test suite:
+```bash
+go test ./...
+```
+
+Tests cover: auth, config, devcontainer discovery, TUI helpers, and utilities.
 
 ## Usage
 
@@ -78,7 +87,9 @@ Constraints:
 
 ## Configuration
 
-Config file: `~/.config/claude-quick/config.yaml`
+Config file location (in priority order):
+1. **Recommended**: `claude-quick.yaml` next to the executable (for `build.sh` installs, this is the repo root)
+2. **Legacy** (deprecated): `~/.config/claude-quick/config.yaml`
 
 ```yaml
 search_paths:
@@ -88,7 +99,17 @@ max_depth: 3
 default_session_name: main
 ```
 
-See [`config.example.yaml`](config.example.yaml) for all options.
+### Migrating from Legacy Location
+
+If you have an existing config at `~/.config/claude-quick/config.yaml`:
+
+```bash
+cp ~/.config/claude-quick/config.yaml /path/to/claude-quick/claude-quick.yaml
+```
+
+The legacy location will still work but shows a deprecation warning.
+
+See [`claude-quick.yaml.example`](claude-quick.yaml.example) for all options.
 
 ## Authentication
 
