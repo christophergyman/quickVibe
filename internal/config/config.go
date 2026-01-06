@@ -198,6 +198,15 @@ func Load() (*Config, error) {
 	if cfg.GitHub.DefaultState == "" {
 		cfg.GitHub.DefaultState = github.IssueStateOpen
 	}
+	if cfg.GitHub.InProgressLabel == "" {
+		cfg.GitHub.InProgressLabel = constants.DefaultInProgressLabel
+	}
+	if cfg.GitHub.LabelColor == "" {
+		cfg.GitHub.LabelColor = constants.DefaultLabelColor
+	}
+	if cfg.GitHub.LabelDescription == "" {
+		cfg.GitHub.LabelDescription = constants.DefaultLabelDescription
+	}
 
 	return cfg, nil
 }
