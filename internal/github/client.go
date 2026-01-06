@@ -137,7 +137,8 @@ func AddLabelToIssue(owner, repo string, issueNumber int, label, color, descript
 	if err != nil {
 		errStr := string(output)
 		// Check if error is due to missing label
-		if createIfMissing && strings.Contains(strings.ToLower(errStr), "label") &&
+		// gh CLI returns errors like "'in-progress' not found" when label doesn't exist
+		if createIfMissing &&
 			(strings.Contains(strings.ToLower(errStr), "not found") ||
 				strings.Contains(strings.ToLower(errStr), "does not exist") ||
 				strings.Contains(strings.ToLower(errStr), "doesn't exist")) {
