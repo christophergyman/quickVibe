@@ -1,6 +1,6 @@
 # Claude Quick
 
-![Claude Quick](claude-quick-pic.png)
+![Claude Quick](claude-quick-nozoom.gif)
 A terminal UI for managing tmux sessions across your devcontainers.
 
 ## Requirements
