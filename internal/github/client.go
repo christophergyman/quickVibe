@@ -64,7 +64,7 @@ func FetchIssues(owner, repo string, cfg Config) ([]Issue, error) {
 		"--repo", fmt.Sprintf("%s/%s", owner, repo),
 		"--state", string(cfg.DefaultState),
 		"--limit", fmt.Sprintf("%d", cfg.MaxIssues),
-		"--json", "number,title,state,url",
+		"--json", "number,title,state,url,labels",
 	}
 
 	cmd := exec.Command("gh", args...)

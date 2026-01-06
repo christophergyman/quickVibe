@@ -29,6 +29,11 @@ func (s *IssueState) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Label represents a GitHub issue label.
+type Label struct {
+	Name string `json:"name"`
+}
+
 // Issue represents a GitHub issue.
 type Issue struct {
 	Number int        `json:"number"`
@@ -36,6 +41,17 @@ type Issue struct {
 	State  IssueState `json:"state"`
 	URL    string     `json:"url"`
 	Body   string     `json:"body"`
+	Labels []Label    `json:"labels"`
+}
+
+// HasLabel checks if the issue has a specific label (case-insensitive).
+func (i Issue) HasLabel(name string) bool {
+	for _, label := range i.Labels {
+		if strings.EqualFold(label.Name, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // Config holds GitHub-related configuration.
